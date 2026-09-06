@@ -1,6 +1,11 @@
 package com.netraze.app.ui.canvas
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,8 +41,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netraze.app.ui.components.InfoCard
 import com.netraze.app.ui.components.PrimaryButton
@@ -60,6 +66,38 @@ private fun checkIsEmulator(): Boolean {
             "google_sdk" == Build.PRODUCT)
 }
 
+private fun hasLocationSurveyPermissions(context: Context): Boolean {
+    val hasFine = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    val hasCoarse = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    val hasNearbyWifi = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        ) == PackageManager.PERMISSION_GRANTED
+    return (hasFine || hasCoarse) && hasNearbyWifi
+}
+
+private fun locationSurveyPermissionsToRequest(): Array<String> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        )
+    } else {
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SurveyCanvasScreen(
@@ -70,16 +108,28 @@ fun SurveyCanvasScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedPosition by remember { mutableStateOf<PositionWithObservations?>(null) }
     var showRawEvidenceDialog by remember { mutableStateOf(false) }
+    var pendingLocationSurveyScan by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val isEmulator = remember { checkIsEmulator() }
-
-    LaunchedEffect(surveyId) {
-        viewModel.loadSurveyCanvasData(surveyId)
-    }
-
     val survey = uiState.survey
     val mode = survey?.mode ?: "location_survey"
     val modeText = mode.replace("_", " ").uppercase()
     val syncStateText = (survey?.syncState ?: "pending").uppercase()
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        if (hasLocationSurveyPermissions(context) && pendingLocationSurveyScan) {
+            pendingLocationSurveyScan = false
+            viewModel.addPositionAndScan(surveyId = surveyId, mode = mode)
+        } else {
+            pendingLocationSurveyScan = false
+            viewModel.showPermissionDenied()
+        }
+    }
+
+    LaunchedEffect(surveyId) {
+        viewModel.loadSurveyCanvasData(surveyId)
+    }
 
     Scaffold(
         topBar = {
@@ -173,7 +223,16 @@ fun SurveyCanvasScreen(
                         text = if (isEmulator) "Field Scan (Physical Only)" else if (uiState.isScanning) "Scanning..." else "+ Scan Wi-Fi",
                         onClick = {
                             if (!isEmulator) {
-                                viewModel.addPositionAndScan(surveyId = surveyId, mode = mode)
+                                if (mode == "location_survey") {
+                                    if (hasLocationSurveyPermissions(context)) {
+                                        viewModel.addPositionAndScan(surveyId = surveyId, mode = mode)
+                                    } else {
+                                        pendingLocationSurveyScan = true
+                                        locationPermissionLauncher.launch(locationSurveyPermissionsToRequest())
+                                    }
+                                } else {
+                                    viewModel.addPositionAndScan(surveyId = surveyId, mode = mode)
+                                }
                             }
                         },
                         enabled = !isEmulator && !uiState.isScanning,
@@ -185,6 +244,16 @@ fun SurveyCanvasScreen(
                         text = "Raw Evidence",
                         onClick = { showRawEvidenceDialog = true },
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            if (uiState.error != null) {
+                InfoCard(isHighEmphasis = false) {
+                    Text(
+                        text = uiState.error ?: "",
+                        style = NetrazeTypography.bodyMedium,
+                        color = TextPrimary
                     )
                 }
             }

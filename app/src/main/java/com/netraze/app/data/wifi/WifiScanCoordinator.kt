@@ -12,11 +12,18 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+interface WifiScanRunner {
+    suspend fun performScanCycle(
+        surveyId: UUID,
+        spatialPositionId: UUID? = null
+    ): Result<ScanCycleEntity>
+}
+
 @Singleton
 class WifiScanCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val scanCycleDao: ScanCycleDao
-) {
+) : WifiScanRunner {
     private val wifiManager: WifiManager? by lazy {
         context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     }
@@ -26,9 +33,9 @@ class WifiScanCoordinator @Inject constructor(
      * generates canonical Android UUIDs, and atomically persists ScanCycleEntity + WifiObservationEntity records in Room DB.
      */
     @SuppressLint("MissingPermission")
-    suspend fun performScanCycle(
+    override suspend fun performScanCycle(
         surveyId: UUID,
-        spatialPositionId: UUID? = null
+        spatialPositionId: UUID?
     ): Result<ScanCycleEntity> {
         val manager = wifiManager ?: return Result.failure(IllegalStateException("WifiManager service unavailable"))
 

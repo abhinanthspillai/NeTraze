@@ -10,7 +10,8 @@ import com.netraze.app.data.local.entity.ScanCycleEntity
 import com.netraze.app.data.local.entity.SpatialPositionEntity
 import com.netraze.app.data.local.entity.SurveyEntity
 import com.netraze.app.data.local.entity.WifiObservationEntity
-import com.netraze.app.data.wifi.WifiScanCoordinator
+import com.netraze.app.data.location.LocationProvider
+import com.netraze.app.data.wifi.WifiScanRunner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,7 +44,8 @@ class SurveyCanvasViewModel @Inject constructor(
     private val spatialPositionDao: SpatialPositionDao,
     private val scanCycleDao: ScanCycleDao,
     private val wifiObservationDao: WifiObservationDao,
-    private val wifiScanCoordinator: WifiScanCoordinator
+    private val wifiScanRunner: WifiScanRunner,
+    private val locationProvider: LocationProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SurveyCanvasUiState())
@@ -115,7 +117,7 @@ class SurveyCanvasViewModel @Inject constructor(
                         latitude = null,
                         longitude = null,
                         accuracyMeters = null,
-                        capturedAt = now,
+                        capturedAt = null,
                         createdAt = now,
                         syncState = "pending"
                     )
@@ -130,40 +132,50 @@ class SurveyCanvasViewModel @Inject constructor(
                         latitude = null,
                         longitude = null,
                         accuracyMeters = null,
-                        capturedAt = now,
+                        capturedAt = null,
                         createdAt = now,
                         syncState = "pending"
                     )
-                    else -> SpatialPositionEntity(
-                        id = posId,
-                        surveyId = surveyId,
-                        label = posLabel,
-                        floorPlanX = null,
-                        floorPlanY = null,
-                        simpleMapX = null,
-                        simpleMapY = null,
-                        latitude = 12.9716, // Sample location coordinates
-                        longitude = 77.5946,
-                        accuracyMeters = 3.0,
-                        capturedAt = now,
-                        createdAt = now,
-                        syncState = "pending"
-                    )
+                    else -> {
+                        val locationFix = locationProvider.getCurrentLocation()
+                        SpatialPositionEntity(
+                            id = posId,
+                            surveyId = surveyId,
+                            label = posLabel,
+                            floorPlanX = null,
+                            floorPlanY = null,
+                            simpleMapX = null,
+                            simpleMapY = null,
+                            latitude = locationFix.latitude,
+                            longitude = locationFix.longitude,
+                            accuracyMeters = locationFix.accuracyMeters,
+                            capturedAt = locationFix.capturedAt,
+                            createdAt = now,
+                            syncState = "pending"
+                        )
+                    }
                 }
 
                 spatialPositionDao.insertSpatialPosition(posEntity)
 
                 // Execute real Wi-Fi hardware scan cycle
-                wifiScanCoordinator.performScanCycle(surveyId, posId)
+                wifiScanRunner.performScanCycle(surveyId, posId)
 
                 // Reload UI state
                 loadSurveyCanvasData(surveyId)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isScanning = false,
-                    error = e.message ?: "Failed to execute scan"
+                    error = e.message ?: "Failed to add position and scan"
                 )
             }
         }
+    }
+
+    fun showPermissionDenied() {
+        _uiState.value = _uiState.value.copy(
+            isScanning = false,
+            error = "Location and Wi-Fi permissions are required to add a Location Survey point."
+        )
     }
 }
