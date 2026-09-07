@@ -11,9 +11,12 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
+    # Render automatically exposes RENDER=true at runtime. This lets us enforce
+    # production security even if ENVIRONMENT was not manually configured.
+    RENDER: bool = False
 
     # Database connection. Local development keeps a convenient fallback;
-    # deployed environments should provide DATABASE_URL explicitly.
+    # deployed environments must provide DATABASE_URL explicitly.
     DATABASE_URL: str = "postgresql+psycopg://netraze_app:1234@127.0.0.1:5432/netraze"
 
     @validator("DATABASE_URL", pre=True)
@@ -26,7 +29,7 @@ class Settings(BaseSettings):
         return v
 
     # JWT authentication security settings.
-    # A known development fallback is allowed only outside production.
+    # A known development fallback is allowed only for local development.
     SECRET_KEY: str = DEVELOPMENT_SECRET_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
@@ -40,7 +43,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_security(self):
         environment = self.ENVIRONMENT.strip().lower()
-        if environment in {"production", "prod"}:
+        is_production = self.RENDER or environment in {"production", "prod"}
+
+        if is_production:
             if self.SECRET_KEY == DEVELOPMENT_SECRET_KEY or len(self.SECRET_KEY) < 32:
                 raise ValueError(
                     "Production requires a strong SECRET_KEY supplied through environment configuration."
