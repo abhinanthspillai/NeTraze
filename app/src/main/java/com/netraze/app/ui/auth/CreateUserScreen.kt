@@ -35,6 +35,7 @@ import com.netraze.app.ui.components.NetrazeLogo
 import com.netraze.app.ui.components.PasswordField
 import com.netraze.app.ui.components.PrimaryButton
 import com.netraze.app.ui.theme.NetrazeTypography
+import com.netraze.app.ui.theme.PrimaryDark
 import com.netraze.app.ui.theme.SuccessChipBackground
 import com.netraze.app.ui.theme.SurfaceLight
 import com.netraze.app.ui.theme.TextPrimary
@@ -47,30 +48,74 @@ fun CreateUserScreen(
 ) {
     val state by viewModel.createUserState.collectAsStateWithLifecycle()
 
-    Surface(modifier = Modifier.fillMaxSize(), color = SurfaceLight) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = SurfaceLight
+    ) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(24.dp))
-            NetrazeLogo(size = 64.dp)
+            
+            NetrazeLogo(
+                size = 64.dp
+            )
+
             Spacer(modifier = Modifier.height(32.dp))
 
             if (state.isSuccess) {
-                Icon(Icons.Rounded.CheckCircle, "Success", tint = SuccessChipBackground, modifier = Modifier.padding(bottom = 16.dp))
-                Text("Account created successfully!", style = NetrazeTypography.titleLarge, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = "Success",
+                    tint = SuccessChipBackground,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                Text(
+                    text = "Account created successfully!",
+                    style = NetrazeTypography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
                 Spacer(modifier = Modifier.height(32.dp))
-                PrimaryButton(text = "BACK TO LOGIN", onClick = onBackToLogin, modifier = Modifier.fillMaxWidth())
+                PrimaryButton(
+                    text = "BACK TO LOGIN",
+                    onClick = onBackToLogin,
+                    modifier = Modifier.fillMaxWidth()
+                )
             } else {
-                Text("Join Netraze", style = NetrazeTypography.displaySmall, color = TextPrimary, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(
+                    text = "Join Netraze",
+                    style = NetrazeTypography.displaySmall,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Create an account to begin surveying.", style = NetrazeTypography.bodyLarge, color = TextSecondary, textAlign = TextAlign.Center)
+
+                Text(
+                    text = "Create an account to begin surveying.",
+                    style = NetrazeTypography.bodyLarge,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+
                 Spacer(modifier = Modifier.height(48.dp))
 
-                state.errorMessage?.let { error ->
-                    InfoCard(isHighEmphasis = false, modifier = Modifier.fillMaxWidth()) {
-                        Text(error, color = Color(0xFFC62828), style = NetrazeTypography.bodyMedium)
+                if (state.errorMessage != null) {
+                    InfoCard(
+                        isHighEmphasis = false,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = state.errorMessage!!,
+                            color = Color(0xFFC62828),
+                            style = NetrazeTypography.bodyMedium
+                        )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -83,9 +128,12 @@ fun CreateUserScreen(
                     leadingIcon = Icons.Rounded.Email,
                     isError = state.errorMessage != null,
                     enabled = !state.isLoading,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 PasswordField(
@@ -97,13 +145,7 @@ fun CreateUserScreen(
                     imeAction = ImeAction.Next,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Use 8–128 characters.",
-                    style = NetrazeTypography.bodySmall,
-                    color = TextSecondary,
-                    modifier = Modifier.fillMaxWidth()
-                )
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 PasswordField(
@@ -113,11 +155,16 @@ fun CreateUserScreen(
                     isError = state.errorMessage != null,
                     enabled = !state.isLoading,
                     imeAction = ImeAction.Done,
-                    keyboardActions = KeyboardActions(onDone = {
-                        if (!state.isLoading && state.newUserEmail.isNotBlank() && state.newUserPassword.isNotBlank()) viewModel.submitCreateUser()
-                    }),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (!state.isLoading && state.newUserEmail.isNotBlank() && state.newUserPassword.isNotBlank()) {
+                                viewModel.submitCreateUser()
+                            }
+                        }
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Spacer(modifier = Modifier.height(32.dp))
 
                 PrimaryButton(
@@ -127,12 +174,26 @@ fun CreateUserScreen(
                     isLoading = state.isLoading,
                     enabled = !state.isLoading && state.newUserEmail.isNotBlank() && state.newUserPassword.isNotBlank()
                 )
+
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Already have an account? ", style = NetrazeTypography.bodyMedium, color = TextSecondary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Already have an account? ",
+                        style = NetrazeTypography.bodyMedium,
+                        color = TextSecondary
+                    )
                     TextButton(onClick = onBackToLogin) {
-                        Text("Login", style = NetrazeTypography.bodyMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Login",
+                            style = NetrazeTypography.bodyMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
