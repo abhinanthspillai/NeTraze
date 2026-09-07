@@ -59,6 +59,7 @@ import javax.inject.Inject
 
 sealed class ScreenState {
 
+```
 object Dashboard : ScreenState()
 
 object AllSurveys : ScreenState()
@@ -98,6 +99,7 @@ data class SurveyCanvas(
     val building: BuildingEntity?,
     val project: ProjectEntity?
 ) : ScreenState()
+```
 
 }
 
@@ -111,6 +113,7 @@ val project: ProjectEntity
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+```
 @Inject
 lateinit var authRepository: AuthRepository
 
@@ -787,5 +790,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
     }
 }
+```
 
 }

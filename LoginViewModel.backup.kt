@@ -38,6 +38,7 @@ private var authRepository: AuthRepository?,
 private var authApi: AuthApi?
 ) : ViewModel() {
 
+```
 constructor() : this(null, null)
 
 private val _uiState = MutableStateFlow(LoginUiState())
@@ -377,5 +378,6 @@ fun submitCreateUser() {
 fun resetCreateUserForm() {
     _createUserState.value = CreateUserUiState()
 }
+```
 
 }
