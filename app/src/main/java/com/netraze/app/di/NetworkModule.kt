@@ -1,6 +1,5 @@
 package com.netraze.app.di
 
-import android.os.Build
 import com.netraze.app.BuildConfig
 import com.netraze.app.data.local.dao.HierarchyDao
 import com.netraze.app.data.local.dao.ScanCycleDao
@@ -35,21 +34,15 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private fun getBaseUrl(): String {
-        val isEmulator = (Build.FINGERPRINT.startsWith("generic") ||
-                Build.FINGERPRINT.startsWith("unknown") ||
-                Build.MODEL.contains("google_sdk") ||
-                Build.MODEL.contains("Emulator") ||
-                Build.MODEL.contains("Android SDK built for x86") ||
-                Build.MANUFACTURER.contains("Genymotion") ||
-                (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")) ||
-                "google_sdk" == Build.PRODUCT)
-        return if (isEmulator) {
-            "http://10.0.2.2:8000/"
-        } else {
-            "https://netraze.onrender.com/"
-        }
-    }
+    /**
+     * Phase 1 production/testing backend.
+     *
+     * Do not infer emulator vs physical device from Build fingerprints: some real
+     * devices can match emulator-like properties, causing the APK to incorrectly
+     * target 10.0.2.2. Android clients use the deployed Render backend so the same
+     * APK works independently of USB, ADB, LAN, or development-machine state.
+     */
+    private const val BASE_URL = "https://netraze.onrender.com/"
 
     @Provides
     @Singleton
@@ -80,7 +73,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(getBaseUrl())
+            .baseUrl(BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
