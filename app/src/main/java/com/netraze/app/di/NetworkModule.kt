@@ -1,6 +1,7 @@
 package com.netraze.app.di
 
 import android.os.Build
+import com.netraze.app.BuildConfig
 import com.netraze.app.data.local.dao.HierarchyDao
 import com.netraze.app.data.local.dao.ScanCycleDao
 import com.netraze.app.data.local.dao.SpatialPositionDao
@@ -43,33 +44,36 @@ object NetworkModule {
                 Build.MANUFACTURER.contains("Genymotion") ||
                 (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")) ||
                 "google_sdk" == Build.PRODUCT)
-        val baseUrl = if (isEmulator) {
+        return if (isEmulator) {
             "http://10.0.2.2:8000/"
         } else {
             "https://netraze.onrender.com/"
         }
-        android.util.Log.d("NETRAZE_API", "Base URL = $baseUrl")
-        return baseUrl
     }
 
     @Provides
     @Singleton
     fun provideOkHttpClient(sessionStore: SecureSessionStore): OkHttpClient {
-        return OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val requestBuilder = chain.request().newBuilder()
                 val session = runBlocking { sessionStore.getSession() }
                 session?.accessToken?.let { token ->
-                    requestBuilder.addHeader("Authorization", "Bearer $token")
+                    requestBuilder.header("Authorization", "Bearer $token")
                 }
                 chain.proceed(requestBuilder.build())
             }
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            })
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .build()
+
+        // Never log request/response bodies: auth bodies can contain passwords.
+        if (BuildConfig.DEBUG) {
+            builder.addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            })
+        }
+
+        return builder.build()
     }
 
     @Provides
@@ -84,45 +88,29 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthApi(retrofit: Retrofit): AuthApi {
-        return retrofit.create(AuthApi::class.java)
-    }
+    fun provideAuthApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
 
     @Provides
     @Singleton
-    fun provideAuthRepository(
-        authApi: AuthApi,
-        sessionStore: SecureSessionStore
-    ): AuthRepository {
-        return AuthRepositoryImpl(authApi, sessionStore)
-    }
+    fun provideAuthRepository(authApi: AuthApi, sessionStore: SecureSessionStore): AuthRepository =
+        AuthRepositoryImpl(authApi, sessionStore)
 
     @Provides
     @Singleton
-    fun provideHierarchyApi(retrofit: Retrofit): HierarchyApi {
-        return retrofit.create(HierarchyApi::class.java)
-    }
+    fun provideHierarchyApi(retrofit: Retrofit): HierarchyApi = retrofit.create(HierarchyApi::class.java)
 
     @Provides
     @Singleton
-    fun provideHierarchyRepository(
-        hierarchyApi: HierarchyApi,
-        hierarchyDao: HierarchyDao
-    ): HierarchyRepository {
-        return HierarchyRepositoryImpl(hierarchyApi, hierarchyDao)
-    }
+    fun provideHierarchyRepository(hierarchyApi: HierarchyApi, hierarchyDao: HierarchyDao): HierarchyRepository =
+        HierarchyRepositoryImpl(hierarchyApi, hierarchyDao)
 
     @Provides
     @Singleton
-    fun provideSurveyApi(retrofit: Retrofit): SurveyApi {
-        return retrofit.create(SurveyApi::class.java)
-    }
+    fun provideSurveyApi(retrofit: Retrofit): SurveyApi = retrofit.create(SurveyApi::class.java)
 
     @Provides
     @Singleton
-    fun provideSyncApi(retrofit: Retrofit): SyncApi {
-        return retrofit.create(SyncApi::class.java)
-    }
+    fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
 
     @Provides
     @Singleton
@@ -132,9 +120,7 @@ object NetworkModule {
         spatialPositionDao: SpatialPositionDao,
         scanCycleDao: ScanCycleDao,
         wifiObservationDao: WifiObservationDao
-    ): SyncManager {
-        return SyncManager(syncApi, surveyDao, spatialPositionDao, scanCycleDao, wifiObservationDao)
-    }
+    ): SyncManager = SyncManager(syncApi, surveyDao, spatialPositionDao, scanCycleDao, wifiObservationDao)
 
     @Provides
     @Singleton
@@ -143,7 +129,5 @@ object NetworkModule {
         surveyDao: SurveyDao,
         sessionStore: SecureSessionStore,
         syncManager: SyncManager
-    ): SurveyRepository {
-        return SurveyRepositoryImpl(surveyApi, surveyDao, sessionStore, syncManager)
-    }
+    ): SurveyRepository = SurveyRepositoryImpl(surveyApi, surveyDao, sessionStore, syncManager)
 }
