@@ -4,6 +4,7 @@ import com.netraze.app.data.remote.api.AuthApi
 import com.netraze.app.data.remote.dto.CreateUserRequestDto
 import com.netraze.app.data.remote.dto.LoginRequestDto
 import com.netraze.app.data.remote.dto.LoginResponseDto
+import com.netraze.app.data.remote.dto.RegisterRequestDto
 import com.netraze.app.data.remote.dto.ResetPasswordRequestDto
 import com.netraze.app.data.remote.dto.ResetPasswordResponseDto
 import com.netraze.app.data.remote.dto.UserDto
@@ -18,7 +19,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -48,27 +48,20 @@ class LoginViewModelTest {
 
     @Test
     fun testFormStateValidation() {
-        val uiState = viewModel.uiState
-
-        assertFalse(uiState.value.isLoginEnabled)
-
-        viewModel.onIdentityChanged("tech@netraze.app")
-        assertFalse(uiState.value.isLoginEnabled)
-
+        assertFalse(viewModel.uiState.value.isLoginEnabled)
+        viewModel.onIdentityChanged("user@netraze.app")
+        assertFalse(viewModel.uiState.value.isLoginEnabled)
         viewModel.onPasswordChanged("Password123")
-        assertTrue(uiState.value.isLoginEnabled)
+        assertTrue(viewModel.uiState.value.isLoginEnabled)
     }
 
     @Test
     fun testSuccessfulLoginFlow() = runTest {
-        viewModel.onIdentityChanged("tech@netraze.app")
+        viewModel.onIdentityChanged("user@netraze.app")
         viewModel.onPasswordChanged("CorrectPassword")
 
         var loginSuccessCalled = false
-        viewModel.submitLogin {
-            loginSuccessCalled = true
-        }
-
+        viewModel.submitLogin { loginSuccessCalled = true }
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(loginSuccessCalled)
@@ -80,12 +73,9 @@ class LoginViewModelTest {
     @Test
     fun testFailedLoginFlow() = runTest {
         fakeAuthRepository.shouldReturnError = true
-
-        viewModel.onIdentityChanged("tech@netraze.app")
+        viewModel.onIdentityChanged("user@netraze.app")
         viewModel.onPasswordChanged("WrongPassword")
-
         viewModel.submitLogin()
-
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isLoading)
@@ -94,64 +84,33 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun testVerifyAdminAndCreateUserFlow() = runTest {
+    fun testPublicRegistrationFlow() = runTest {
         viewModel.updateCreateUserForm(
-            adminEmail = "admin@netraze.app",
-            adminPassword = "AdminPassword123"
-        )
-
-        viewModel.verifyAdminCredentials()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertTrue(viewModel.createUserState.value.isAdminVerified)
-        assertNotNull(viewModel.createUserState.value.adminToken)
-
-        viewModel.updateCreateUserForm(
-            newUserEmail = "newtech@netraze.app",
+            newUserEmail = "newuser@netraze.app",
             newUserPassword = "Password123!",
-            newUserConfirmPassword = "Password123!",
-            newUserRole = "user"
+            confirmPassword = "Password123!"
         )
-
-        var createdEmail: String? = null
-        viewModel.submitCreateUser { email ->
-            createdEmail = email
-        }
-
+        viewModel.submitCreateUser()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals("newtech@netraze.app", createdEmail)
-        assertEquals("newtech@netraze.app", viewModel.uiState.value.identity)
+        assertTrue(viewModel.createUserState.value.isSuccess)
+        assertNull(viewModel.createUserState.value.errorMessage)
+        assertEquals("newuser@netraze.app", fakeAuthApi.lastRegistration?.email)
     }
 
     @Test
-    fun testResetPasswordFlow() = runTest {
-        viewModel.updateResetPasswordForm(
-            adminEmail = "admin@netraze.app",
-            adminPassword = "AdminPassword123"
+    fun testRegistrationRejectsShortPasswordBeforeApiCall() = runTest {
+        viewModel.updateCreateUserForm(
+            newUserEmail = "newuser@netraze.app",
+            newUserPassword = "short",
+            confirmPassword = "short"
         )
-
-        viewModel.verifyAdminCredentialsForReset()
+        viewModel.submitCreateUser()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertTrue(viewModel.resetPasswordState.value.isAdminVerified)
-        assertNotNull(viewModel.resetPasswordState.value.adminToken)
-
-        viewModel.updateResetPasswordForm(
-            targetUserEmail = "tech@netraze.app",
-            newPassword = "NewPassword123!",
-            confirmNewPassword = "NewPassword123!"
-        )
-
-        var resetTargetEmail: String? = null
-        viewModel.submitResetPassword { email ->
-            resetTargetEmail = email
-        }
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals("tech@netraze.app", resetTargetEmail)
-        assertEquals("tech@netraze.app", viewModel.uiState.value.identity)
+        assertFalse(viewModel.createUserState.value.isSuccess)
+        assertEquals("Password must be between 8 and 128 characters", viewModel.createUserState.value.errorMessage)
+        assertNull(fakeAuthApi.lastRegistration)
     }
 
     private class FakeAuthRepository : AuthRepository {
@@ -174,41 +133,18 @@ class LoginViewModelTest {
 
         override suspend fun hasActiveSession(): Boolean = currentSession != null
         override suspend fun getCurrentSession(): AuthSession? = currentSession
-
-        override suspend fun verifyAdmin(email: String, password: String): Result<String> {
-            return if (shouldReturnError) {
-                Result.failure(Exception("Administrator verification failed."))
-            } else {
-                Result.success("admin_token_xyz")
-            }
-        }
-
-        override suspend fun createUser(
-            adminToken: String,
-            email: String,
-            password: String,
-            role: String
-        ): Result<UserDto> {
-            return Result.success(UserDto(id = UUID.randomUUID(), email = email, role = role))
-        }
-
-        override suspend fun resetPassword(
-            adminToken: String,
-            targetEmail: String,
-            newPassword: String
-        ): Result<String> {
-            return Result.success("Password reset successfully.")
-        }
     }
 
     private class FakeAuthApi : AuthApi {
+        var lastRegistration: RegisterRequestDto? = null
+
         override suspend fun login(request: LoginRequestDto): LoginResponseDto {
             val userId = UUID.randomUUID()
             return LoginResponseDto("token_123", "bearer", UserDto(userId, request.email, "user"))
         }
 
         override suspend fun getMe(): UserDto {
-            return UserDto(UUID.randomUUID(), "tech@netraze.app", "user")
+            return UserDto(UUID.randomUUID(), "user@netraze.app", "user")
         }
 
         override suspend fun createUser(
@@ -216,6 +152,11 @@ class LoginViewModelTest {
             request: CreateUserRequestDto
         ): UserDto {
             return UserDto(UUID.randomUUID(), request.email, request.role)
+        }
+
+        override suspend fun registerUser(request: RegisterRequestDto): UserDto {
+            lastRegistration = request
+            return UserDto(UUID.randomUUID(), request.email, "user")
         }
 
         override suspend fun resetPassword(
