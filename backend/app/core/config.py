@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Netraze Backend"
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     # Render automatically exposes RENDER=true at runtime. This lets us enforce
     # production security even if ENVIRONMENT was not manually configured.
     RENDER: bool = False
