@@ -1,6 +1,8 @@
 package com.netraze.app.ui.survey
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,13 +12,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
@@ -27,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,6 +64,7 @@ fun StartSurveyFlowDialog(
     var hierarchyDraft by remember { mutableStateOf(NewSurveyHierarchyDraft()) }
     var surveyTitle by remember { mutableStateOf("") }
     var selectedMode by remember { mutableStateOf("location_survey") }
+    var preparedLocation by remember { mutableStateOf<SurveyLocationContext?>(null) }
 
     fun goBack() {
         val previousStage = previousSurveyStartStage(stage)
@@ -221,14 +228,18 @@ fun StartSurveyFlowDialog(
                             )
                         }
                         item {
-                            SurveyModeOption("Location Survey", "location_survey", Icons.Rounded.Place, selectedMode) {
-                                selectedMode = "location_survey"
-                            }
-                            SurveyModeOption("Floor Plan", "floor_plan", Icons.Rounded.Map, selectedMode) {
-                                selectedMode = "floor_plan"
-                            }
-                            SurveyModeOption("Simple Map", "simple_map", Icons.Rounded.Navigation, selectedMode) {
-                                selectedMode = "simple_map"
+                            surveyModeUiOptions().forEach { option ->
+                                SurveyModeOption(
+                                    title = option.title,
+                                    description = option.description,
+                                    icon = when (option.mode) {
+                                        "floor_plan" -> Icons.Rounded.Map
+                                        "simple_map" -> Icons.Rounded.Navigation
+                                        else -> Icons.Rounded.Place
+                                    },
+                                    selected = selectedMode == option.mode,
+                                    onClick = { selectedMode = option.mode }
+                                )
                             }
                         }
                     }
@@ -253,22 +264,25 @@ fun StartSurveyFlowDialog(
                 SurveyStartStage.SurveyDetails -> {
                     TextButton(
                         onClick = {
-                            hierarchyViewModel.createLocationHierarchy(
-                                projectName = hierarchyDraft.projectName,
-                                buildingName = hierarchyDraft.buildingName,
-                                floorName = hierarchyDraft.floorName,
-                                surveyAreaName = hierarchyDraft.surveyAreaName
-                            ) { project, building, floor, area ->
-                                onCreateSurvey(
-                                    SurveyLocationContext(
+                            val existingLocation = preparedLocation
+                            if (existingLocation != null) {
+                                onCreateSurvey(existingLocation, surveyTitle.trim(), selectedMode)
+                            } else {
+                                hierarchyViewModel.createLocationHierarchy(
+                                    projectName = hierarchyDraft.projectName,
+                                    buildingName = hierarchyDraft.buildingName,
+                                    floorName = hierarchyDraft.floorName,
+                                    surveyAreaName = hierarchyDraft.surveyAreaName
+                                ) { project, building, floor, area ->
+                                    val location = SurveyLocationContext(
                                         surveyArea = area,
                                         floor = floor,
                                         building = building,
                                         project = project
-                                    ),
-                                    surveyTitle.trim(),
-                                    selectedMode
-                                )
+                                    )
+                                    preparedLocation = location
+                                    onCreateSurvey(location, surveyTitle.trim(), selectedMode)
+                                }
                             }
                         },
                         enabled = canStartSurvey
@@ -294,28 +308,52 @@ fun StartSurveyFlowDialog(
 
 @Composable
 private fun SurveyModeOption(
-    label: String,
-    mode: String,
+    title: String,
+    description: String,
     icon: ImageVector,
-    selectedMode: String,
+    selected: Boolean,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) PrimaryDark else TextSecondary.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .background(
+                if (selected) PrimaryDark.copy(alpha = 0.05f) else Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
             .clickable { onClick() }
-            .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
         RadioButton(
-            selected = selectedMode == mode,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(selectedColor = PrimaryDark)
+            selected = selected,
+            onClick = null,
+            colors = RadioButtonDefaults.colors(selectedColor = PrimaryDark, unselectedColor = TextSecondary)
         )
-        Text(
-            text = "$label ($mode)",
-            style = NetrazeTypography.bodyMedium,
-            color = TextPrimary
+        Spacer(modifier = Modifier.width(8.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            tint = if (selected) PrimaryDark else TextSecondary
         )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = title,
+                style = NetrazeTypography.labelLarge,
+                color = if (selected) PrimaryDark else TextPrimary
+            )
+            Text(
+                text = description,
+                style = NetrazeTypography.bodySmall,
+                color = TextSecondary
+            )
+        }
     }
 }

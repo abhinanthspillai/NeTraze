@@ -45,6 +45,12 @@ data class NewSurveyHierarchyDraft(
         get() = canEnterSurveyArea && isSurveyAreaValid
 }
 
+data class SurveyModeUiOption(
+    val title: String,
+    val description: String,
+    val mode: String
+)
+
 data class SurveyStartSelection(
     val projectId: UUID? = null,
     val buildingId: UUID? = null,
@@ -96,4 +102,24 @@ fun startSurveySectionOrder(hasContinueSurveys: Boolean): List<StartSurveySectio
     } else {
         listOf(StartSurveySection.CreateNewSurvey)
     }
+}
+
+fun surveyModeUiOptions(): List<SurveyModeUiOption> {
+    return listOf(
+        SurveyModeUiOption(
+            title = "Location Survey",
+            description = "Dense AP data collection for an area",
+            mode = "location_survey"
+        ),
+        SurveyModeUiOption(
+            title = "Floor Plan",
+            description = "Collect data pinned to coordinates",
+            mode = "floor_plan"
+        ),
+        SurveyModeUiOption(
+            title = "Simple Map",
+            description = "Quick topology map without coordinates",
+            mode = "simple_map"
+        )
+    )
 }

@@ -127,6 +127,16 @@ class StartSurveyFlowStateTest {
         assertFalse(isSupportedSurveyMode("simple-map"))
     }
 
+    @Test
+    fun testSurveyModeUiOptionsUseFriendlyLabelsWithInternalMappings() {
+        val options = surveyModeUiOptions()
+
+        assertEquals(listOf("Location Survey", "Floor Plan", "Simple Map"), options.map { it.title })
+        assertEquals(listOf("location_survey", "floor_plan", "simple_map"), options.map { it.mode })
+        assertTrue(options.all { "_" !in it.title && "_" !in it.description })
+        assertTrue(options.all { "(" !in it.title && ")" !in it.title })
+    }
+
     private fun survey(status: String, syncState: String): SurveyEntity {
         return SurveyEntity(
             id = UUID.randomUUID(),

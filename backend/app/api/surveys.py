@@ -36,13 +36,13 @@ def _get_survey_area_authorization(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    is_owner = (project.owner_id == current_user.id) and (current_user.role == "administrator")
+    is_owner = project.owner_id == current_user.id
     member_record = db.execute(
         select(ProjectMember).where(
             ProjectMember.project_id == project.id, ProjectMember.user_id == current_user.id
         )
     ).scalar_one_or_none()
-    is_member = (member_record is not None) or (project.owner_id == current_user.id)
+    is_member = member_record is not None
 
     if not is_member and not is_owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Survey area not found")
@@ -104,9 +104,9 @@ def create_survey(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _, project, _, is_member = _get_survey_area_authorization(db, survey_area_id, current_user)
+    _, project, is_owner, is_member = _get_survey_area_authorization(db, survey_area_id, current_user)
 
-    if not is_member:
+    if not is_member and not is_owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to create survey in this project")
 
     survey_id = payload.id or uuid.uuid4()
