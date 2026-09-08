@@ -97,6 +97,78 @@ def test_create_survey_preserves_android_uuid():
     assert res_data["status"] == "in_progress"
 
 
+def test_user_owned_hierarchy_can_create_location_survey():
+    user_id = uuid.uuid4()
+    user = User(
+        id=user_id,
+        email=f"owner_user_{user_id.hex[:6]}@netraze.app",
+        password_hash=get_password_hash("Password123!"),
+        role="user"
+    )
+    session = SessionLocal()
+    try:
+        session.add(user)
+        session.commit()
+    finally:
+        session.close()
+
+    headers = {"Authorization": f"Bearer {create_access_token(user_id)}"}
+
+    res_project = client.post(
+        "/api/v1/projects",
+        json={"name": "Device Created Survey Project"},
+        headers=headers
+    )
+    assert res_project.status_code == 201
+    project_id = uuid.UUID(res_project.json()["id"])
+    assert res_project.json()["owner_id"] == str(user_id)
+
+    session = SessionLocal()
+    try:
+        owner_member = session.get(ProjectMember, {"project_id": project_id, "user_id": user_id})
+        assert owner_member is not None
+    finally:
+        session.close()
+
+    res_building = client.post(
+        f"/api/v1/projects/{project_id}/buildings",
+        json={"name": "MCA Block"},
+        headers=headers
+    )
+    assert res_building.status_code == 201
+    building_id = res_building.json()["id"]
+
+    res_floor = client.post(
+        f"/api/v1/buildings/{building_id}/floors",
+        json={"name": "Second Floor"},
+        headers=headers
+    )
+    assert res_floor.status_code == 201
+    floor_id = res_floor.json()["id"]
+
+    res_area = client.post(
+        f"/api/v1/floors/{floor_id}/survey-areas",
+        json={"name": "Lab 204"},
+        headers=headers
+    )
+    assert res_area.status_code == 201
+    area_id = res_area.json()["id"]
+
+    android_uuid = str(uuid.uuid4())
+    res_survey = client.post(
+        f"/api/v1/survey-areas/{area_id}/surveys",
+        json={
+            "id": android_uuid,
+            "title": "Physical Device Location Survey",
+            "mode": "location_survey"
+        },
+        headers=headers
+    )
+    assert res_survey.status_code == 201
+    assert res_survey.json()["id"] == android_uuid
+    assert res_survey.json()["mode"] == "location_survey"
+
+
 def test_get_surveys_and_survey_by_id():
     data = setup_survey_test_data()
     headers = {"Authorization": f"Bearer {data['token_admin']}"}

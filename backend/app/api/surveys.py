@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.core.database import get_db
-from app.models.domain import Building, Floor, Project, ProjectMember, ScanCycle, Survey, SurveyArea, User, WifiObservation
+from app.models.domain import Building, Floor, FloorPlan, Project, ProjectMember, ScanCycle, SimpleMap, Survey, SurveyArea, User, WifiObservation
 from app.schemas.survey import AccessPointOut, ChannelOut, ObservationOut, SurveyCreate, SurveyOut, SurveyUpdate
 
 router = APIRouter(tags=["surveys"])
@@ -36,13 +36,13 @@ def _get_survey_area_authorization(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    is_owner = (project.owner_id == current_user.id) and (current_user.role == "administrator")
+    is_owner = project.owner_id == current_user.id
     member_record = db.execute(
         select(ProjectMember).where(
             ProjectMember.project_id == project.id, ProjectMember.user_id == current_user.id
         )
     ).scalar_one_or_none()
-    is_member = (member_record is not None) or (project.owner_id == current_user.id)
+    is_member = member_record is not None
 
     if not is_member and not is_owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Survey area not found")
@@ -61,6 +61,42 @@ def _get_survey_authorization(
     return survey, project, is_owner, is_member
 
 
+def _ensure_mode_artifact(
+    db: Session,
+    survey_area_id: uuid.UUID,
+    payload: SurveyCreate,
+    current_user: User
+) -> Tuple[uuid.UUID | None, uuid.UUID | None]:
+    if payload.mode == "floor_plan":
+        floor_plan_id = payload.floor_plan_id or uuid.uuid4()
+        floor_plan = db.execute(select(FloorPlan).where(FloorPlan.id == floor_plan_id)).scalar_one_or_none()
+        if not floor_plan:
+            db.add(FloorPlan(
+                id=floor_plan_id,
+                survey_area_id=survey_area_id,
+                storage_path="normalized://phase1-placeholder",
+                original_filename="Normalized Phase 1 workspace",
+                width_px=None,
+                height_px=None,
+                uploaded_by=current_user.id
+            ))
+        return floor_plan_id, None
+
+    if payload.mode == "simple_map":
+        simple_map_id = payload.simple_map_id or uuid.uuid4()
+        simple_map = db.execute(select(SimpleMap).where(SimpleMap.id == simple_map_id)).scalar_one_or_none()
+        if not simple_map:
+            db.add(SimpleMap(
+                id=simple_map_id,
+                survey_area_id=survey_area_id,
+                artifact_reference="normalized://phase1-simple-map",
+                created_by=current_user.id
+            ))
+        return None, simple_map_id
+
+    return None, None
+
+
 @router.post("/survey-areas/{survey_area_id}/surveys", response_model=SurveyOut, status_code=status.HTTP_201_CREATED)
 def create_survey(
     survey_area_id: uuid.UUID,
@@ -68,9 +104,9 @@ def create_survey(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _, project, _, is_member = _get_survey_area_authorization(db, survey_area_id, current_user)
+    _, project, is_owner, is_member = _get_survey_area_authorization(db, survey_area_id, current_user)
 
-    if not is_member:
+    if not is_member and not is_owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to create survey in this project")
 
     survey_id = payload.id or uuid.uuid4()
@@ -80,6 +116,7 @@ def create_survey(
         return existing_survey
 
     started_at = payload.started_at or utc_now()
+    floor_plan_id, simple_map_id = _ensure_mode_artifact(db, survey_area_id, payload, current_user)
 
     survey = Survey(
         id=survey_id,
@@ -87,8 +124,8 @@ def create_survey(
         title=payload.title,
         mode=payload.mode,
         status="in_progress",
-        floor_plan_id=payload.floor_plan_id,
-        simple_map_id=payload.simple_map_id,
+        floor_plan_id=floor_plan_id,
+        simple_map_id=simple_map_id,
         created_by=current_user.id,
         started_at=started_at,
         created_at=utc_now(),

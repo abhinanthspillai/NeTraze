@@ -1,4 +1,5 @@
 import uuid
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from app.schemas.hierarchy import (
 )
 
 router = APIRouter(tags=["Hierarchy Management"])
+logger = logging.getLogger(__name__)
 
 
 def _get_project_authorization(project_id: uuid.UUID, current_user: User, db: Session):
@@ -64,11 +66,25 @@ def _get_survey_area_authorization(survey_area_id: uuid.UUID, current_user: User
     return survey_area, floor, building, project, is_owner, is_member
 
 
-def _require_mutation_authority(current_user: User, is_owner: bool):
-    if current_user.role != "administrator":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to perform this operation")
+def _require_mutation_authority(
+    current_user: User,
+    project: Project,
+    is_owner: bool,
+    is_member: bool,
+    operation: str
+):
     if not is_owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project owner administrator may modify hierarchy")
+        logger.warning(
+            "Hierarchy mutation denied: operation=%s user_id=%s user_role=%s project_id=%s owner_id=%s is_owner=%s is_member=%s",
+            operation,
+            current_user.id,
+            current_user.role,
+            project.id,
+            project.owner_id,
+            is_owner,
+            is_member,
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project owner may modify hierarchy")
 
 
 # ==========================================
@@ -98,13 +114,31 @@ def create_project(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role != "administrator":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators may create projects")
+    project_name = payload.name.strip()
+    existing_project = db.execute(
+        select(Project).where(
+            Project.owner_id == current_user.id,
+            Project.name == project_name,
+            Project.is_active.is_(True)
+        )
+    ).scalar_one_or_none()
+    if existing_project:
+        existing_member = db.execute(
+            select(ProjectMember).where(
+                ProjectMember.project_id == existing_project.id,
+                ProjectMember.user_id == current_user.id
+            )
+        ).scalar_one_or_none()
+        if not existing_member:
+            db.add(ProjectMember(project_id=existing_project.id, user_id=current_user.id))
+            db.commit()
+            db.refresh(existing_project)
+        return existing_project
 
     new_project = Project(
         id=uuid.uuid4(),
         owner_id=current_user.id,
-        name=payload.name.strip(),
+        name=project_name,
         is_active=True
     )
     db.add(new_project)
@@ -137,8 +171,8 @@ def update_project(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    project, is_owner, _ = _get_project_authorization(project_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    project, is_owner, is_member = _get_project_authorization(project_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "PATCH /api/v1/projects/{project_id}")
 
     project.name = payload.name.strip()
     db.commit()
@@ -168,13 +202,23 @@ def create_building(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    _, is_owner, _ = _get_project_authorization(project_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    project, is_owner, is_member = _get_project_authorization(project_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "POST /api/v1/projects/{project_id}/buildings")
+
+    building_name = payload.name.strip()
+    existing_building = db.execute(
+        select(Building).where(
+            Building.project_id == project_id,
+            Building.name == building_name
+        )
+    ).scalar_one_or_none()
+    if existing_building:
+        return existing_building
 
     new_building = Building(
         id=uuid.uuid4(),
         project_id=project_id,
-        name=payload.name.strip()
+        name=building_name
     )
     db.add(new_building)
     db.commit()
@@ -199,8 +243,8 @@ def update_building(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    building, _, is_owner, _ = _get_building_authorization(building_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    building, project, is_owner, is_member = _get_building_authorization(building_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "PATCH /api/v1/buildings/{building_id}")
 
     building.name = payload.name.strip()
     db.commit()
@@ -230,13 +274,23 @@ def create_floor(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    _, _, is_owner, _ = _get_building_authorization(building_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    _, project, is_owner, is_member = _get_building_authorization(building_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "POST /api/v1/buildings/{building_id}/floors")
+
+    floor_name = payload.name.strip()
+    existing_floor = db.execute(
+        select(Floor).where(
+            Floor.building_id == building_id,
+            Floor.name == floor_name
+        )
+    ).scalar_one_or_none()
+    if existing_floor:
+        return existing_floor
 
     new_floor = Floor(
         id=uuid.uuid4(),
         building_id=building_id,
-        name=payload.name.strip()
+        name=floor_name
     )
     db.add(new_floor)
     db.commit()
@@ -261,8 +315,8 @@ def update_floor(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    floor, _, _, is_owner, _ = _get_floor_authorization(floor_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    floor, _, project, is_owner, is_member = _get_floor_authorization(floor_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "PATCH /api/v1/floors/{floor_id}")
 
     floor.name = payload.name.strip()
     db.commit()
@@ -292,13 +346,23 @@ def create_survey_area(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    _, _, _, is_owner, _ = _get_floor_authorization(floor_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    _, _, project, is_owner, is_member = _get_floor_authorization(floor_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "POST /api/v1/floors/{floor_id}/survey-areas")
+
+    survey_area_name = payload.name.strip()
+    existing_survey_area = db.execute(
+        select(SurveyArea).where(
+            SurveyArea.floor_id == floor_id,
+            SurveyArea.name == survey_area_name
+        )
+    ).scalar_one_or_none()
+    if existing_survey_area:
+        return existing_survey_area
 
     new_survey_area = SurveyArea(
         id=uuid.uuid4(),
         floor_id=floor_id,
-        name=payload.name.strip()
+        name=survey_area_name
     )
     db.add(new_survey_area)
     db.commit()
@@ -323,8 +387,8 @@ def update_survey_area(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    survey_area, _, _, _, is_owner, _ = _get_survey_area_authorization(survey_area_id, current_user, db)
-    _require_mutation_authority(current_user, is_owner)
+    survey_area, _, _, project, is_owner, is_member = _get_survey_area_authorization(survey_area_id, current_user, db)
+    _require_mutation_authority(current_user, project, is_owner, is_member, "PATCH /api/v1/survey-areas/{survey_area_id}")
 
     survey_area.name = payload.name.strip()
     db.commit()
