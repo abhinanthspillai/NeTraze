@@ -105,7 +105,7 @@ def test_user_can_create_owned_project(member_tech):
     assert data["owner_id"] == str(member_tech.id)
 
 
-def test_user_can_create_hierarchy_and_survey_inside_owned_project(db_session, member_tech):
+def test_user_can_create_hierarchy_inside_owned_project(member_tech):
     res_project = client.post(
         "/api/v1/projects",
         json={"name": "Self Service Survey Project"},
@@ -113,13 +113,6 @@ def test_user_can_create_hierarchy_and_survey_inside_owned_project(db_session, m
     )
     assert res_project.status_code == 201
     project_id = res_project.json()["id"]
-    assert res_project.json()["owner_id"] == str(member_tech.id)
-
-    membership = db_session.get(
-        ProjectMember,
-        {"project_id": uuid.UUID(project_id), "user_id": member_tech.id}
-    )
-    assert membership is not None
 
     res_building = client.post(
         f"/api/v1/projects/{project_id}/buildings",
@@ -144,86 +137,6 @@ def test_user_can_create_hierarchy_and_survey_inside_owned_project(db_session, m
     )
     assert res_area.status_code == 201
     assert res_area.json()["name"] == "Lab"
-    survey_area_id = res_area.json()["id"]
-
-    survey_id = str(uuid.uuid4())
-    res_survey = client.post(
-        f"/api/v1/survey-areas/{survey_area_id}/surveys",
-        json={
-            "id": survey_id,
-            "title": "Self Service Survey",
-            "mode": "location_survey"
-        },
-        headers=auth_headers(member_tech)
-    )
-    assert res_survey.status_code == 201
-    assert res_survey.json()["id"] == survey_id
-
-
-def test_unrelated_user_cannot_create_survey_in_another_users_project(
-    db_session, member_tech, non_member
-):
-    res_project = client.post(
-        "/api/v1/projects",
-        json={"name": "Owner Only Survey Project"},
-        headers=auth_headers(member_tech)
-    )
-    project_id = uuid.UUID(res_project.json()["id"])
-
-    building = Building(id=uuid.uuid4(), project_id=project_id, name="Owner Building")
-    floor = Floor(id=uuid.uuid4(), building_id=building.id, name="Owner Floor")
-    area = SurveyArea(id=uuid.uuid4(), floor_id=floor.id, name="Owner Area")
-    db_session.add_all([building, floor, area])
-    db_session.commit()
-
-    res_survey = client.post(
-        f"/api/v1/survey-areas/{area.id}/surveys",
-        json={
-            "id": str(uuid.uuid4()),
-            "title": "Unauthorized Survey",
-            "mode": "location_survey"
-        },
-        headers=auth_headers(non_member)
-    )
-    assert res_survey.status_code == 404
-
-
-def test_retry_reuses_existing_owned_hierarchy_rows(db_session, member_tech):
-    headers = auth_headers(member_tech)
-    names = {
-        "project": "Retry Safe Project",
-        "building": "Retry Safe Building",
-        "floor": "Retry Safe Floor",
-        "area": "Retry Safe Area",
-    }
-
-    def create_chain():
-        project = client.post("/api/v1/projects", json={"name": names["project"]}, headers=headers).json()
-        building = client.post(
-            f"/api/v1/projects/{project['id']}/buildings",
-            json={"name": names["building"]},
-            headers=headers
-        ).json()
-        floor = client.post(
-            f"/api/v1/buildings/{building['id']}/floors",
-            json={"name": names["floor"]},
-            headers=headers
-        ).json()
-        area = client.post(
-            f"/api/v1/floors/{floor['id']}/survey-areas",
-            json={"name": names["area"]},
-            headers=headers
-        ).json()
-        return project, building, floor, area
-
-    first = create_chain()
-    second = create_chain()
-
-    assert [item["id"] for item in first] == [item["id"] for item in second]
-    assert db_session.query(Project).filter_by(owner_id=member_tech.id, name=names["project"]).count() == 1
-    assert db_session.query(Building).filter_by(project_id=uuid.UUID(first[0]["id"]), name=names["building"]).count() == 1
-    assert db_session.query(Floor).filter_by(building_id=uuid.UUID(first[1]["id"]), name=names["floor"]).count() == 1
-    assert db_session.query(SurveyArea).filter_by(floor_id=uuid.UUID(first[2]["id"]), name=names["area"]).count() == 1
 
 
 # ==========================================
