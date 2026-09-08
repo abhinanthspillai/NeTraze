@@ -12,11 +12,18 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+interface WifiScanRunner {
+    suspend fun performScanCycle(
+        surveyId: UUID,
+        spatialPositionId: UUID? = null
+    ): Result<ScanCycleEntity>
+}
+
 @Singleton
 class WifiScanCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val scanCycleDao: ScanCycleDao
-) {
+) : WifiScanRunner {
     private val wifiManager: WifiManager? by lazy {
         context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     }
@@ -26,17 +33,21 @@ class WifiScanCoordinator @Inject constructor(
      * generates canonical Android UUIDs, and atomically persists ScanCycleEntity + WifiObservationEntity records in Room DB.
      */
     @SuppressLint("MissingPermission")
-    suspend fun performScanCycle(
+    override suspend fun performScanCycle(
         surveyId: UUID,
-        spatialPositionId: UUID? = null
+        spatialPositionId: UUID?
     ): Result<ScanCycleEntity> {
         val manager = wifiManager ?: return Result.failure(IllegalStateException("WifiManager service unavailable"))
 
-        // Trigger hardware scan request
-        try {
+        // startScan is asynchronous; the immediate scanResults read below is treated as freshness-unknown.
+        val scanRequested = try {
             manager.startScan()
         } catch (e: Exception) {
-            // Ignore startScan throttling errors on newer Android versions
+            false
+        }
+
+        if (!scanRequested) {
+            // Android may throttle active scans. Preserve whatever results are available, but do not call them fresh.
         }
 
         val rawResults: List<ScanResult> = try {
@@ -75,7 +86,7 @@ class WifiScanCoordinator @Inject constructor(
             spatialPositionId = spatialPositionId,
             capturedAtWallclock = now,
             androidScanTimestampRaw = now,
-            freshResults = true,
+            freshResults = false,
             createdAt = now,
             syncState = "pending"
         )

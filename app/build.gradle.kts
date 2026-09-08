@@ -21,7 +21,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-
     }
 
     compileOptions {
@@ -41,11 +40,12 @@ android {
 }
 
 dependencies {
+    // AndroidX
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    
+
     // Compose BOM
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.ui:ui")
@@ -64,15 +64,16 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.1")
     ksp("androidx.room:room-compiler:2.7.1")
 
-    // Networking (Retrofit & OkHttp)
+    // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // DataStore (Direct Android Keystore Encrypted Persistence)
+    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // Debug tools
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Unit Testing

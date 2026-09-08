@@ -18,4 +18,7 @@ interface WifiObservationDao {
 
     @Query("SELECT * FROM wifi_observations WHERE bssid = :bssid")
     suspend fun getObservationsForBssid(bssid: String): List<WifiObservationEntity>
+
+    @Query("UPDATE wifi_observations SET syncState = :syncState WHERE id IN (:ids)")
+    suspend fun updateSyncState(ids: List<UUID>, syncState: String)
 }

@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 import androidx.compose.material3.Icon
@@ -26,7 +26,8 @@ import com.netraze.app.ui.theme.SurfaceWhite
 data class NavItem(
     val id: String,
     val icon: ImageVector,
-    val contentDescription: String
+    val contentDescription: String,
+    val isPrimaryAction: Boolean = false
 )
 
 @Composable
@@ -39,29 +40,33 @@ fun FloatingBottomNav(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 24.dp),
+            .height(78.dp)
+            .padding(horizontal = 22.dp)
+            .padding(bottom = 4.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
         Row(
             modifier = Modifier
-                .wrapContentWidth()
+                .fillMaxWidth()
                 .background(PrimaryDark, RoundedCornerShape(50))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEach { item ->
-                val isSelected = item.id == selectedId
+                val isSelected = item.id == selectedId && !item.isPrimaryAction
                 val backgroundColor = if (isSelected) SurfaceWhite else Color.Transparent
                 val iconColor = if (isSelected) PrimaryDark else SurfaceWhite
+                val targetSize = 54.dp
+                val iconSize = if (item.isPrimaryAction) 34.dp else 30.dp
 
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .background(backgroundColor, RoundedCornerShape(16.dp))
+                        .size(targetSize)
+                        .background(backgroundColor, RoundedCornerShape(20.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = androidx.compose.material3.ripple(bounded = false, radius = 24.dp),
+                            indication = androidx.compose.material3.ripple(bounded = false, radius = targetSize / 2),
                             onClick = { onItemSelected(item.id) }
                         ),
                     contentAlignment = Alignment.Center
@@ -70,7 +75,7 @@ fun FloatingBottomNav(
                         imageVector = item.icon,
                         contentDescription = item.contentDescription,
                         tint = iconColor,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(iconSize)
                     )
                 }
             }

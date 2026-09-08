@@ -10,7 +10,8 @@ import com.netraze.app.data.local.entity.ScanCycleEntity
 import com.netraze.app.data.local.entity.SpatialPositionEntity
 import com.netraze.app.data.local.entity.SurveyEntity
 import com.netraze.app.data.local.entity.WifiObservationEntity
-import com.netraze.app.data.wifi.WifiScanCoordinator
+import com.netraze.app.data.location.LocationProvider
+import com.netraze.app.data.wifi.WifiScanRunner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,13 +38,18 @@ data class SurveyCanvasUiState(
     val error: String? = null
 )
 
+private const val MODE_FLOOR_PLAN = "floor_plan"
+private const val MODE_SIMPLE_MAP = "simple_map"
+private const val MODE_LOCATION_SURVEY = "location_survey"
+
 @HiltViewModel
 class SurveyCanvasViewModel @Inject constructor(
     private val surveyDao: SurveyDao,
     private val spatialPositionDao: SpatialPositionDao,
     private val scanCycleDao: ScanCycleDao,
     private val wifiObservationDao: WifiObservationDao,
-    private val wifiScanCoordinator: WifiScanCoordinator
+    private val wifiScanRunner: WifiScanRunner,
+    private val locationProvider: LocationProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SurveyCanvasUiState())
@@ -104,66 +110,101 @@ class SurveyCanvasViewModel @Inject constructor(
                 val posLabel = label ?: "Point $count"
 
                 val posEntity = when (mode) {
-                    "floor_plan" -> SpatialPositionEntity(
-                        id = posId,
-                        surveyId = surveyId,
-                        label = posLabel,
-                        floorPlanX = x ?: 0.5,
-                        floorPlanY = y ?: 0.5,
-                        simpleMapX = null,
-                        simpleMapY = null,
-                        latitude = null,
-                        longitude = null,
-                        accuracyMeters = null,
-                        capturedAt = now,
-                        createdAt = now,
-                        syncState = "pending"
-                    )
-                    "simple_map" -> SpatialPositionEntity(
-                        id = posId,
-                        surveyId = surveyId,
-                        label = posLabel,
-                        floorPlanX = null,
-                        floorPlanY = null,
-                        simpleMapX = x ?: 0.5,
-                        simpleMapY = y ?: 0.5,
-                        latitude = null,
-                        longitude = null,
-                        accuracyMeters = null,
-                        capturedAt = now,
-                        createdAt = now,
-                        syncState = "pending"
-                    )
-                    else -> SpatialPositionEntity(
-                        id = posId,
-                        surveyId = surveyId,
-                        label = posLabel,
-                        floorPlanX = null,
-                        floorPlanY = null,
-                        simpleMapX = null,
-                        simpleMapY = null,
-                        latitude = 12.9716, // Sample location coordinates
-                        longitude = 77.5946,
-                        accuracyMeters = 3.0,
-                        capturedAt = now,
-                        createdAt = now,
-                        syncState = "pending"
-                    )
+                    MODE_FLOOR_PLAN -> {
+                        require(x != null && y != null) {
+                            "Tap the normalized floor-plan workspace to choose a sampling position."
+                        }
+                        SpatialPositionEntity(
+                            id = posId,
+                            surveyId = surveyId,
+                            label = posLabel,
+                            floorPlanX = x.coerceIn(0.0, 1.0),
+                            floorPlanY = y.coerceIn(0.0, 1.0),
+                            simpleMapX = null,
+                            simpleMapY = null,
+                            latitude = null,
+                            longitude = null,
+                            accuracyMeters = null,
+                            capturedAt = null,
+                            createdAt = now,
+                            syncState = "pending"
+                        )
+                    }
+                    MODE_SIMPLE_MAP -> {
+                        require(x != null && y != null) {
+                            "Tap the simple map workspace to choose a sampling position."
+                        }
+                        SpatialPositionEntity(
+                            id = posId,
+                            surveyId = surveyId,
+                            label = posLabel,
+                            floorPlanX = null,
+                            floorPlanY = null,
+                            simpleMapX = x.coerceIn(0.0, 1.0),
+                            simpleMapY = y.coerceIn(0.0, 1.0),
+                            latitude = null,
+                            longitude = null,
+                            accuracyMeters = null,
+                            capturedAt = null,
+                            createdAt = now,
+                            syncState = "pending"
+                        )
+                    }
+                    else -> {
+                        val locationFix = locationProvider.getCurrentLocation()
+                        SpatialPositionEntity(
+                            id = posId,
+                            surveyId = surveyId,
+                            label = posLabel,
+                            floorPlanX = null,
+                            floorPlanY = null,
+                            simpleMapX = null,
+                            simpleMapY = null,
+                            latitude = locationFix.latitude,
+                            longitude = locationFix.longitude,
+                            accuracyMeters = locationFix.accuracyMeters,
+                            capturedAt = locationFix.capturedAt,
+                            createdAt = now,
+                            syncState = "pending"
+                        )
+                    }
                 }
 
                 spatialPositionDao.insertSpatialPosition(posEntity)
 
                 // Execute real Wi-Fi hardware scan cycle
-                wifiScanCoordinator.performScanCycle(surveyId, posId)
+                wifiScanRunner.performScanCycle(surveyId, posId)
 
                 // Reload UI state
                 loadSurveyCanvasData(surveyId)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isScanning = false,
-                    error = e.message ?: "Failed to execute scan"
+                    error = e.message ?: "Failed to add position and scan"
                 )
             }
         }
+    }
+
+    fun scanExistingPosition(surveyId: UUID, spatialPositionId: UUID) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isScanning = true, error = null)
+            try {
+                wifiScanRunner.performScanCycle(surveyId, spatialPositionId)
+                loadSurveyCanvasData(surveyId)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isScanning = false,
+                    error = e.message ?: "Failed to add scan cycle"
+                )
+            }
+        }
+    }
+
+    fun showPermissionDenied() {
+        _uiState.value = _uiState.value.copy(
+            isScanning = false,
+            error = "Location and Wi-Fi permissions are required to add a Location Survey point."
+        )
     }
 }

@@ -20,6 +20,9 @@ interface SpatialPositionDao {
     @Query("SELECT * FROM spatial_positions WHERE surveyId = :surveyId ORDER BY createdAt ASC")
     suspend fun getSpatialPositionsForSurvey(surveyId: UUID): List<SpatialPositionEntity>
 
+    @Query("UPDATE spatial_positions SET syncState = :syncState WHERE id IN (:ids)")
+    suspend fun updateSyncState(ids: List<UUID>, syncState: String)
+
     @Transaction
     suspend fun insertAtomicSpatialPosition(spatialPosition: SpatialPositionEntity) {
         require(spatialPosition.hasValidLocationFix()) {

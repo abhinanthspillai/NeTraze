@@ -3,6 +3,16 @@ package com.netraze.app.data.remote.dto
 import com.google.gson.annotations.SerializedName
 import java.util.UUID
 
+data class SurveySyncRootDto(
+    @SerializedName("id") val id: UUID? = null,
+    @SerializedName("survey_area_id") val surveyAreaId: UUID,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("mode") val mode: String,
+    @SerializedName("floor_plan_id") val floorPlanId: UUID? = null,
+    @SerializedName("simple_map_id") val simpleMapId: UUID? = null,
+    @SerializedName("started_at") val startedAt: String? = null
+)
+
 data class SpatialPositionSyncDto(
     @SerializedName("id") val id: UUID,
     @SerializedName("label") val label: String? = null,
@@ -40,7 +50,7 @@ data class ScanCycleSyncDto(
 )
 
 data class SurveySyncPayloadDto(
-    @SerializedName("survey") val survey: CreateSurveyRequestDto? = null,
+    @SerializedName("survey") val survey: SurveySyncRootDto? = null,
     @SerializedName("spatial_positions") val spatialPositions: List<SpatialPositionSyncDto> = emptyList(),
     @SerializedName("scan_cycles") val scanCycles: List<ScanCycleSyncDto> = emptyList()
 )

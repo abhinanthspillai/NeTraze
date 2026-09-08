@@ -43,6 +43,8 @@ class SurveyRepositoryImpl(
 
         // 1. Android Canonical UUID Generation FIRST
         val surveyId = UUID.randomUUID()
+        val resolvedFloorPlanId = floorPlanId ?: if (mode == "floor_plan") UUID.randomUUID() else null
+        val resolvedSimpleMapId = simpleMapId ?: if (mode == "simple_map") UUID.randomUUID() else null
 
         val localEntity = SurveyEntity(
             id = surveyId,
@@ -50,8 +52,8 @@ class SurveyRepositoryImpl(
             title = title ?: "",
             mode = mode,
             status = "in_progress",
-            floorPlanId = floorPlanId,
-            simpleMapId = simpleMapId,
+            floorPlanId = resolvedFloorPlanId,
+            simpleMapId = resolvedSimpleMapId,
             createdBy = currentUserId,
             startedAt = now,
             completedAt = null,
@@ -73,8 +75,8 @@ class SurveyRepositoryImpl(
                 id = surveyId, // Preserves Android-generated canonical UUID
                 title = title,
                 mode = mode,
-                floorPlanId = floorPlanId,
-                simpleMapId = simpleMapId
+                floorPlanId = resolvedFloorPlanId,
+                simpleMapId = resolvedSimpleMapId
             )
             val remoteDto = surveyApi.createSurvey(surveyAreaId, request)
             surveyDao.updateSyncState(surveyId, "synced")

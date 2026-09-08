@@ -14,6 +14,8 @@ import com.netraze.app.data.remote.dto.CreateSurveyAreaRequestDto
 import com.netraze.app.data.remote.dto.FloorDto
 import com.netraze.app.data.remote.dto.ProjectDto
 import com.netraze.app.data.remote.dto.SurveyAreaDto
+import retrofit2.HttpException
+import java.io.IOException
 import java.util.UUID
 
 interface HierarchyRepository {
@@ -55,7 +57,7 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertProjects(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(hierarchyMutationFailure(e))
         }
     }
 
@@ -82,7 +84,7 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertBuildings(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(hierarchyMutationFailure(e))
         }
     }
 
@@ -109,7 +111,7 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertFloors(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(hierarchyMutationFailure(e))
         }
     }
 
@@ -136,7 +138,21 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertSurveyAreas(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(hierarchyMutationFailure(e))
+        }
+    }
+
+    private fun hierarchyMutationFailure(e: Exception): Exception {
+        return when (e) {
+            is HttpException -> {
+                if (e.code() == 403) {
+                    Exception("Unable to create the survey. You don't have permission to modify this project.", e)
+                } else {
+                    Exception("Unable to create the survey hierarchy (${e.code()}).", e)
+                }
+            }
+            is IOException -> Exception("Unable to create the survey while offline. Your entered details have been kept.", e)
+            else -> e
         }
     }
 

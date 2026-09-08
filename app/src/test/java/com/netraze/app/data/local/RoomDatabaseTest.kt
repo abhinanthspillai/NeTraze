@@ -225,6 +225,71 @@ class RoomDatabaseTest {
         assertEquals(bssid, obsList[1].bssid)
     }
 
+    @Test
+    fun testPersistedEvidenceReloadsOriginalValuesWithoutFabricatedDefaults() = runBlocking {
+        val (surveyId, posId) = setupBaseSurvey()
+        val cycleId = UUID.randomUUID()
+        val obsId = UUID.randomUUID()
+        val pos = SpatialPositionEntity(
+            id = posId,
+            surveyId = surveyId,
+            label = "Reload Point",
+            simpleMapX = 0.33,
+            simpleMapY = 0.67,
+            latitude = null,
+            longitude = null,
+            accuracyMeters = null,
+            capturedAt = null,
+            createdAt = 2000L
+        )
+        val cycle = ScanCycleEntity(
+            id = cycleId,
+            surveyId = surveyId,
+            spatialPositionId = posId,
+            capturedAtWallclock = 2100L,
+            androidScanTimestampRaw = 987654321L,
+            freshResults = false,
+            createdAt = 2100L
+        )
+        val obs = WifiObservationEntity(
+            id = obsId,
+            scanCycleId = cycleId,
+            ssid = null,
+            bssid = "AA:BB:CC:DD:EE:FF",
+            rssiDbm = -61,
+            frequencyMhz = 2462,
+            channel = null,
+            channelSource = "unavailable",
+            capabilities = null
+        )
+
+        db.spatialPositionDao().insertSpatialPosition(pos)
+        db.scanCycleDao().insertScanCycleWithObservations(cycle, listOf(obs))
+
+        val reloadedPosition = db.spatialPositionDao().getSpatialPositionById(posId)
+        val reloadedCycle = db.scanCycleDao().getScanCycleById(cycleId)
+        val reloadedObservation = db.wifiObservationDao().getObservationsForCycle(cycleId).single()
+
+        assertEquals(posId, reloadedPosition?.id)
+        assertEquals(0.33, reloadedPosition?.simpleMapX!!, 0.0001)
+        assertEquals(0.67, reloadedPosition.simpleMapY!!, 0.0001)
+        assertNull(reloadedPosition.latitude)
+        assertNull(reloadedPosition.longitude)
+        assertNull(reloadedPosition.accuracyMeters)
+        assertNull(reloadedPosition.capturedAt)
+        assertEquals(cycleId, reloadedCycle?.id)
+        assertEquals(posId, reloadedCycle?.spatialPositionId)
+        assertEquals(2100L, reloadedCycle?.capturedAtWallclock)
+        assertEquals(false, reloadedCycle?.freshResults)
+        assertEquals(obsId, reloadedObservation.id)
+        assertNull(reloadedObservation.ssid)
+        assertEquals("AA:BB:CC:DD:EE:FF", reloadedObservation.bssid)
+        assertEquals(-61, reloadedObservation.rssiDbm)
+        assertEquals(2462, reloadedObservation.frequencyMhz)
+        assertNull(reloadedObservation.channel)
+        assertNull(reloadedObservation.capabilities)
+    }
+
     private suspend fun setupBaseSurvey(): Pair<UUID, UUID> {
         val projectId = UUID.randomUUID()
         val buildingId = UUID.randomUUID()

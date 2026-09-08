@@ -67,7 +67,7 @@ fun LocationsTabScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
-                .padding(top = 48.dp, bottom = 100.dp) // Bottom padding for floating nav
+                .padding(top = 48.dp, bottom = 88.dp) // Bottom padding for compact floating nav
         ) {
             Text(
                 text = "Locations",

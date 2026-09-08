@@ -27,6 +27,9 @@ interface ScanCycleDao {
     @Query("SELECT * FROM scan_cycles WHERE spatialPositionId = :spatialPositionId")
     suspend fun getScanCyclesForPosition(spatialPositionId: UUID): List<ScanCycleEntity>
 
+    @Query("UPDATE scan_cycles SET syncState = :syncState WHERE id IN (:ids)")
+    suspend fun updateSyncState(ids: List<UUID>, syncState: String)
+
     @Transaction
     suspend fun insertScanCycleWithObservations(
         scanCycle: ScanCycleEntity,
