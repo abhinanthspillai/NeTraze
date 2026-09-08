@@ -1,5 +1,6 @@
 package com.netraze.app.data.repository
 
+import android.util.Log
 import com.netraze.app.data.local.dao.HierarchyDao
 import com.netraze.app.data.local.entity.BuildingEntity
 import com.netraze.app.data.local.entity.FloorEntity
@@ -34,6 +35,10 @@ class HierarchyRepositoryImpl(
     private val hierarchyDao: HierarchyDao
 ) : HierarchyRepository {
 
+    private companion object {
+        const val TAG = "HierarchyRepository"
+    }
+
     override suspend fun getProjects(): Result<List<ProjectEntity>> {
         return try {
             val dtos = hierarchyApi.getProjects()
@@ -57,7 +62,7 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertProjects(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(hierarchyMutationFailure(e))
+            Result.failure(hierarchyMutationFailure("POST /api/v1/projects", null, e))
         }
     }
 
@@ -84,7 +89,7 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertBuildings(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(hierarchyMutationFailure(e))
+            Result.failure(hierarchyMutationFailure("POST /api/v1/projects/$projectId/buildings", projectId, e))
         }
     }
 
@@ -111,7 +116,7 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertFloors(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(hierarchyMutationFailure(e))
+            Result.failure(hierarchyMutationFailure("POST /api/v1/buildings/$buildingId/floors", buildingId, e))
         }
     }
 
@@ -138,20 +143,24 @@ class HierarchyRepositoryImpl(
             hierarchyDao.insertSurveyAreas(listOf(entity))
             Result.success(entity)
         } catch (e: Exception) {
-            Result.failure(hierarchyMutationFailure(e))
+            Result.failure(hierarchyMutationFailure("POST /api/v1/floors/$floorId/survey-areas", floorId, e))
         }
     }
 
-    private fun hierarchyMutationFailure(e: Exception): Exception {
+    private fun hierarchyMutationFailure(operation: String, parentId: UUID?, e: Exception): Exception {
         return when (e) {
             is HttpException -> {
+                Log.w(TAG, "Hierarchy mutation failed: operation=$operation parentId=$parentId code=${e.code()}", e)
                 if (e.code() == 403) {
-                    Exception("Unable to create the survey. You don't have permission to modify this project.", e)
+                    Exception("Unable to create the survey. You don't have permission to modify this project. ($operation)", e)
                 } else {
-                    Exception("Unable to create the survey hierarchy (${e.code()}).", e)
+                    Exception("Unable to create the survey hierarchy at $operation (${e.code()}).", e)
                 }
             }
-            is IOException -> Exception("Unable to create the survey while offline. Your entered details have been kept.", e)
+            is IOException -> {
+                Log.w(TAG, "Hierarchy mutation failed offline: operation=$operation parentId=$parentId", e)
+                Exception("Unable to create the survey while offline. Your entered details have been kept.", e)
+            }
             else -> e
         }
     }
