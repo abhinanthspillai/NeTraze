@@ -93,13 +93,50 @@ def test_administrator_creates_project(owner_admin):
     assert data["is_active"] is True
 
 
-def test_technician_cannot_create_project(member_tech):
+def test_user_can_create_owned_project(member_tech):
     response = client.post(
         "/api/v1/projects",
-        json={"name": "Tech Project Attempt"},
+        json={"name": "User Owned Survey Project"},
         headers=auth_headers(member_tech)
     )
-    assert response.status_code == 403
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "User Owned Survey Project"
+    assert data["owner_id"] == str(member_tech.id)
+
+
+def test_user_can_create_hierarchy_inside_owned_project(member_tech):
+    res_project = client.post(
+        "/api/v1/projects",
+        json={"name": "Self Service Survey Project"},
+        headers=auth_headers(member_tech)
+    )
+    assert res_project.status_code == 201
+    project_id = res_project.json()["id"]
+
+    res_building = client.post(
+        f"/api/v1/projects/{project_id}/buildings",
+        json={"name": "MCA Block"},
+        headers=auth_headers(member_tech)
+    )
+    assert res_building.status_code == 201
+    building_id = res_building.json()["id"]
+
+    res_floor = client.post(
+        f"/api/v1/buildings/{building_id}/floors",
+        json={"name": "Second Floor"},
+        headers=auth_headers(member_tech)
+    )
+    assert res_floor.status_code == 201
+    floor_id = res_floor.json()["id"]
+
+    res_area = client.post(
+        f"/api/v1/floors/{floor_id}/survey-areas",
+        json={"name": "Lab"},
+        headers=auth_headers(member_tech)
+    )
+    assert res_area.status_code == 201
+    assert res_area.json()["name"] == "Lab"
 
 
 # ==========================================

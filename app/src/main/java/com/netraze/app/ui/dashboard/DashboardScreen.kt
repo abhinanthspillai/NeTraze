@@ -19,11 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Assignment
 import androidx.compose.material.icons.rounded.Business
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.WifiTethering
@@ -42,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import com.netraze.app.data.local.entity.SurveyEntity
 import com.netraze.app.ui.components.InfoCard
 import com.netraze.app.ui.theme.NetrazeTypography
-import com.netraze.app.ui.theme.PrimaryDark
 import com.netraze.app.ui.theme.SurfaceLight
 import com.netraze.app.ui.theme.SurfaceTranslucent
 import com.netraze.app.ui.theme.TextPrimary
@@ -58,7 +55,6 @@ fun DashboardHomeScreen(
     recentSurvey: SurveyEntity?,
     recentSurveys: List<SurveyEntity>,
     allSynced: Boolean,
-    onStartSurveyClick: () -> Unit,
     onContinueSurveyClick: (SurveyEntity) -> Unit,
     onBrowseLocations: () -> Unit,
     onViewAllSurveys: () -> Unit
@@ -80,8 +76,8 @@ fun DashboardHomeScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp)
-                // Bottom padding to avoid the floating nav bar
-                .padding(bottom = 100.dp)
+                // Bottom padding to avoid the compact floating nav bar.
+                .padding(bottom = 88.dp)
         ) {
             // Header Section
             Row(
@@ -146,57 +142,6 @@ fun DashboardHomeScreen(
             )
 
             Spacer(modifier = Modifier.height(32.dp))
-
-            // Start Survey Card (White High Emphasis)
-            InfoCard(
-                isHighEmphasis = true,
-                onClick = onStartSurveyClick
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.WifiTethering,
-                                contentDescription = "Start Survey",
-                                tint = TextPrimary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "New Survey",
-                                style = NetrazeTypography.titleLarge,
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Begin capturing Wi-Fi metrics for a new location.",
-                            style = NetrazeTypography.bodyMedium,
-                            color = TextSecondary
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryDark),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowForward,
-                            contentDescription = "Start",
-                            tint = Color.White
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             // Stats Grid
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {

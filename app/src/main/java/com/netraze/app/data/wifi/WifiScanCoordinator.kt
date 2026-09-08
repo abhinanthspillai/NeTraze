@@ -39,11 +39,15 @@ class WifiScanCoordinator @Inject constructor(
     ): Result<ScanCycleEntity> {
         val manager = wifiManager ?: return Result.failure(IllegalStateException("WifiManager service unavailable"))
 
-        // Trigger hardware scan request
-        try {
+        // startScan is asynchronous; the immediate scanResults read below is treated as freshness-unknown.
+        val scanRequested = try {
             manager.startScan()
         } catch (e: Exception) {
-            // Ignore startScan throttling errors on newer Android versions
+            false
+        }
+
+        if (!scanRequested) {
+            // Android may throttle active scans. Preserve whatever results are available, but do not call them fresh.
         }
 
         val rawResults: List<ScanResult> = try {
@@ -82,7 +86,7 @@ class WifiScanCoordinator @Inject constructor(
             spatialPositionId = spatialPositionId,
             capturedAtWallclock = now,
             androidScanTimestampRaw = now,
-            freshResults = true,
+            freshResults = false,
             createdAt = now,
             syncState = "pending"
         )

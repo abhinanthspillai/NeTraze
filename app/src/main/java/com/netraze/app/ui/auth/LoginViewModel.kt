@@ -69,8 +69,8 @@ fun setDependencies(
  * does not briefly render the Login screen before authentication has been
  * determined.
  *
- * A locally stored token is only treated as authenticated after /auth/me
- * successfully validates it.
+ * A locally stored token remains usable for offline Room-first work when
+ * /auth/me cannot be reached. Confirmed auth rejection still signs out.
  */
 fun checkSessionRestoration() {
     val repository = authRepository ?: return
@@ -107,7 +107,7 @@ fun checkSessionRestoration() {
 
         } catch (e: HttpException) {
 
-            if (e.code() == 401) {
+            if (e.code() == 401 || e.code() == 403) {
                 repository.logout()
 
                 _authState.value = AuthenticatedState(
@@ -117,7 +117,7 @@ fun checkSessionRestoration() {
             } else {
                 _authState.value = AuthenticatedState(
                     isCheckingSession = false,
-                    isAuthenticated = false,
+                    isAuthenticated = true,
                     session = session,
                     isFetchingProfile = false,
                     profileError = "Unable to verify your session. Please try again."
@@ -131,7 +131,7 @@ fun checkSessionRestoration() {
             // when connectivity is restored or on a future application start.
             _authState.value = AuthenticatedState(
                 isCheckingSession = false,
-                isAuthenticated = false,
+                isAuthenticated = true,
                 session = session,
                 isFetchingProfile = false,
                 profileError = "Unable to verify your session. Check your connection."

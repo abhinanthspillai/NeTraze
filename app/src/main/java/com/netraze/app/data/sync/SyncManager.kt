@@ -5,10 +5,10 @@ import com.netraze.app.data.local.dao.SpatialPositionDao
 import com.netraze.app.data.local.dao.SurveyDao
 import com.netraze.app.data.local.dao.WifiObservationDao
 import com.netraze.app.data.remote.api.SyncApi
-import com.netraze.app.data.remote.dto.CreateSurveyRequestDto
 import com.netraze.app.data.remote.dto.ScanCycleSyncDto
 import com.netraze.app.data.remote.dto.SpatialPositionSyncDto
 import com.netraze.app.data.remote.dto.SurveySyncPayloadDto
+import com.netraze.app.data.remote.dto.SurveySyncRootDto
 import com.netraze.app.data.remote.dto.SurveySyncResultDto
 import com.netraze.app.data.remote.dto.WifiObservationSyncDto
 import java.time.Instant
@@ -30,12 +30,14 @@ class SyncManager @Inject constructor(
 
         // 1. Gather pending survey root if pending
         val rootDto = if (survey.syncState == "pending") {
-            CreateSurveyRequestDto(
+            SurveySyncRootDto(
                 id = survey.id,
+                surveyAreaId = survey.surveyAreaId,
                 title = survey.title,
                 mode = survey.mode,
                 floorPlanId = survey.floorPlanId,
-                simpleMapId = survey.simpleMapId
+                simpleMapId = survey.simpleMapId,
+                startedAt = Instant.ofEpochMilli(survey.startedAt).toString()
             )
         } else null
 
@@ -58,9 +60,18 @@ class SyncManager @Inject constructor(
         }
 
         // 3. Gather pending scan cycles & wifi observations
-        val cycles = scanCycleDao.getScanCyclesForSurvey(surveyId).filter { it.syncState == "pending" }
-        val cycleDtos = cycles.map { cycle ->
+        val pendingCycleIds = mutableListOf<UUID>()
+        val pendingObservationIds = mutableListOf<UUID>()
+        val cycleDtos = scanCycleDao.getScanCyclesForSurvey(surveyId).mapNotNull { cycle ->
             val observations = wifiObservationDao.getObservationsForCycle(cycle.id)
+                .filter { it.syncState == "pending" }
+            if (cycle.syncState != "pending" && observations.isEmpty()) {
+                return@mapNotNull null
+            }
+            if (cycle.syncState == "pending") {
+                pendingCycleIds.add(cycle.id)
+            }
+            pendingObservationIds.addAll(observations.map { it.id })
             val obsDtos = observations.map { obs ->
                 WifiObservationSyncDto(
                     id = obs.id,
@@ -97,6 +108,15 @@ class SyncManager @Inject constructor(
             // Update Room sync states on success
             if (survey.syncState == "pending") {
                 surveyDao.updateSyncState(surveyId, "synced")
+            }
+            if (positions.isNotEmpty()) {
+                spatialPositionDao.updateSyncState(positions.map { it.id }, "synced")
+            }
+            if (pendingCycleIds.isNotEmpty()) {
+                scanCycleDao.updateSyncState(pendingCycleIds, "synced")
+            }
+            if (pendingObservationIds.isNotEmpty()) {
+                wifiObservationDao.updateSyncState(pendingObservationIds, "synced")
             }
 
             Result.success(result)

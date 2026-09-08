@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.Assignment
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netraze.app.data.local.entity.BuildingEntity
@@ -42,14 +44,13 @@ import com.netraze.app.ui.components.FloatingBottomNav
 import com.netraze.app.ui.components.NavItem
 import com.netraze.app.ui.dashboard.DashboardHomeScreen
 import com.netraze.app.ui.hierarchy.BuildingDetailScreen
-import com.netraze.app.ui.hierarchy.CompactLocationSelectorDialog
 import com.netraze.app.ui.hierarchy.FloorDetailScreen
 import com.netraze.app.ui.hierarchy.HierarchyViewModel
 import com.netraze.app.ui.hierarchy.LocationsTabScreen
 import com.netraze.app.ui.hierarchy.ProjectDetailScreen
 import com.netraze.app.ui.hierarchy.ProjectsScreen
 import com.netraze.app.ui.survey.AllSurveysTabScreen
-import com.netraze.app.ui.survey.CreateSurveyDialog
+import com.netraze.app.ui.survey.StartSurveyFlowDialog
 import com.netraze.app.ui.survey.SurveyViewModel
 import com.netraze.app.ui.survey.SurveysScreen
 import com.netraze.app.ui.theme.NetrazeTheme
@@ -181,15 +182,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     )
                 }
 
-                var showLocationSelector by remember {
-                    mutableStateOf(false)
-                }
-
-                var pendingSurveyLocation by remember {
-                    mutableStateOf<SurveyLocationContext?>(null)
-                }
-
-                var showSurveyDetailsDialog by remember {
+                var showStartSurveyFlow by remember {
                     mutableStateOf(false)
                 }
 
@@ -217,9 +210,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     } else {
 
                         currentScreen = ScreenState.Dashboard
-                        showLocationSelector = false
-                        pendingSurveyLocation = null
-                        showSurveyDetailsDialog = false
+                        showStartSurveyFlow = false
                     }
                 }
 
@@ -312,10 +303,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
                                             recentSurveys = recentSurveys,
                                             allSynced = allSynced,
 
-                                            onStartSurveyClick = {
-                                                showLocationSelector = true
-                                            },
-
                                             onContinueSurveyClick = { survey ->
 
                                                 currentScreen =
@@ -358,7 +345,7 @@ override fun onCreate(savedInstanceState: Bundle?) {
                                             },
 
                                             onStartSurveyClick = {
-                                                showLocationSelector = true
+                                                showStartSurveyFlow = true
                                             }
                                         )
                                     }
@@ -554,110 +541,44 @@ override fun onCreate(savedInstanceState: Bundle?) {
                                     }
                                 }
 
-                                /*
-                                 * Location selector used when starting
-                                 * a survey from the top-level screens.
-                                 */
-                                if (showLocationSelector) {
+                                if (showStartSurveyFlow) {
 
-                                    CompactLocationSelectorDialog(
-                                        viewModel =
-                                            hierarchyViewModel,
-
+                                    StartSurveyFlowDialog(
+                                        hierarchyViewModel = hierarchyViewModel,
+                                        existingSurveys = surveysState.surveys,
                                         onDismiss = {
-                                            showLocationSelector = false
+                                            showStartSurveyFlow = false
                                         },
-
-                                        onLocationSelected = {
-                                                area,
-                                                floor,
-                                                building,
-                                                project ->
-
-                                            pendingSurveyLocation =
-                                                SurveyLocationContext(
-                                                    surveyArea = area,
-                                                    floor = floor,
-                                                    building = building,
-                                                    project = project
+                                        onContinueSurvey = { survey ->
+                                            showStartSurveyFlow = false
+                                            currentScreen =
+                                                ScreenState.SurveyCanvas(
+                                                    survey = survey,
+                                                    surveyArea = null,
+                                                    floor = null,
+                                                    building = null,
+                                                    project = null
                                                 )
-
-                                            showLocationSelector = false
-                                            showSurveyDetailsDialog = true
+                                        },
+                                        onCreateSurvey = { location, title, mode ->
+                                            surveyViewModel.createSurvey(
+                                                surveyAreaId = location.surveyArea.id,
+                                                title = title,
+                                                mode = mode,
+                                                onSuccess = { newSurvey ->
+                                                    showStartSurveyFlow = false
+                                                    currentScreen =
+                                                        ScreenState.SurveyCanvas(
+                                                            survey = newSurvey,
+                                                            surveyArea = location.surveyArea,
+                                                            floor = location.floor,
+                                                            building = location.building,
+                                                            project = location.project
+                                                        )
+                                                }
+                                            )
                                         }
                                     )
-                                }
-
-                                /*
-                                 * Survey creation dialog displayed once
-                                 * a location has been selected.
-                                 */
-                                if (showSurveyDetailsDialog) {
-
-                                    val location =
-                                        pendingSurveyLocation
-
-                                    if (location != null) {
-
-                                        CreateSurveyDialog(
-
-                                            onDismiss = {
-                                                showSurveyDetailsDialog =
-                                                    false
-
-                                                pendingSurveyLocation =
-                                                    null
-                                            },
-
-                                            onConfirm = {
-                                                    title,
-                                                    mode ->
-
-                                                showSurveyDetailsDialog =
-                                                    false
-
-                                                surveyViewModel.createSurvey(
-                                                    surveyAreaId =
-                                                        location
-                                                            .surveyArea
-                                                            .id,
-
-                                                    title = title,
-                                                    mode = mode,
-
-                                                    onSuccess = {
-                                                            newSurvey ->
-
-                                                        pendingSurveyLocation =
-                                                            null
-
-                                                        currentScreen =
-                                                            ScreenState
-                                                                .SurveyCanvas(
-                                                                    survey =
-                                                                        newSurvey,
-
-                                                                    surveyArea =
-                                                                        location
-                                                                            .surveyArea,
-
-                                                                    floor =
-                                                                        location
-                                                                            .floor,
-
-                                                                    building =
-                                                                        location
-                                                                            .building,
-
-                                                                    project =
-                                                                        location
-                                                                            .project
-                                                                )
-                                                    }
-                                                )
-                                            }
-                                        )
-                                    }
                                 }
 
                                 /*
@@ -667,6 +588,10 @@ override fun onCreate(savedInstanceState: Bundle?) {
                                 if (isTopLevelScreen) {
 
                                     FloatingBottomNav(
+                                        modifier =
+                                            Modifier.align(
+                                                Alignment.BottomCenter
+                                            ),
 
                                         items = listOf(
 
@@ -680,6 +605,13 @@ override fun onCreate(savedInstanceState: Bundle?) {
                                                 id = "surveys",
                                                 icon = Icons.Rounded.Assignment,
                                                 contentDescription = "Surveys"
+                                            ),
+
+                                            NavItem(
+                                                id = "create_survey",
+                                                icon = Icons.Rounded.WifiTethering,
+                                                contentDescription = "Create new survey",
+                                                isPrimaryAction = true
                                             ),
 
                                             NavItem(
@@ -716,24 +648,28 @@ override fun onCreate(savedInstanceState: Bundle?) {
 
                                         onItemSelected = { id ->
 
-                                            currentScreen =
-                                                when (id) {
+                                            if (id == "create_survey") {
+                                                showStartSurveyFlow = true
+                                            } else {
+                                                currentScreen =
+                                                    when (id) {
 
-                                                    "dashboard" ->
-                                                        ScreenState.Dashboard
+                                                        "dashboard" ->
+                                                            ScreenState.Dashboard
 
-                                                    "surveys" ->
-                                                        ScreenState.AllSurveys
+                                                        "surveys" ->
+                                                            ScreenState.AllSurveys
 
-                                                    "locations" ->
-                                                        ScreenState.Locations
+                                                        "locations" ->
+                                                            ScreenState.Locations
 
-                                                    "account" ->
-                                                        ScreenState.Account
+                                                        "account" ->
+                                                            ScreenState.Account
 
-                                                    else ->
-                                                        ScreenState.Dashboard
-                                                }
+                                                        else ->
+                                                            ScreenState.Dashboard
+                                                    }
+                                            }
                                         }
                                     )
                                 }

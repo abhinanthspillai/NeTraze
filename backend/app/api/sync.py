@@ -5,9 +5,15 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.domain import (
+    Building,
+    Floor,
+    FloorPlan,
     FloorPlanPosition,
     LocationFix,
+    Project,
+    ProjectMember,
     ScanCycle,
+    SimpleMap,
     SimpleMapPosition,
     SpatialPosition,
     Survey,
@@ -28,6 +34,65 @@ def _verify_survey_access(survey_id: uuid.UUID, current_user: User, db: Session)
     return survey
 
 
+def _verify_area_access(area_id: uuid.UUID, current_user: User, db: Session) -> SurveyArea:
+    area = db.query(SurveyArea).filter(SurveyArea.id == area_id).first()
+    if not area:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Survey area not found")
+
+    floor = db.query(Floor).filter(Floor.id == area.floor_id).first()
+    building = db.query(Building).filter(Building.id == floor.building_id).first() if floor else None
+    project = db.query(Project).filter(Project.id == building.project_id).first() if building else None
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Survey area not found")
+
+    membership = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project.id,
+        ProjectMember.user_id == current_user.id
+    ).first()
+    if project.owner_id != current_user.id and not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Survey area not found")
+
+    return area
+
+
+def _ensure_mode_artifact(
+    survey_area_id: uuid.UUID,
+    payload,
+    current_user: User,
+    db: Session
+):
+    if payload.mode == "floor_plan":
+        floor_plan_id = payload.floor_plan_id or uuid.uuid4()
+        floor_plan = db.query(FloorPlan).filter(FloorPlan.id == floor_plan_id).first()
+        if not floor_plan:
+            db.add(FloorPlan(
+                id=floor_plan_id,
+                survey_area_id=survey_area_id,
+                storage_path="normalized://phase1-placeholder",
+                original_filename="Normalized Phase 1 workspace",
+                width_px=None,
+                height_px=None,
+                uploaded_by=current_user.id
+            ))
+        payload.floor_plan_id = floor_plan_id
+        return floor_plan_id, None
+
+    if payload.mode == "simple_map":
+        simple_map_id = payload.simple_map_id or uuid.uuid4()
+        simple_map = db.query(SimpleMap).filter(SimpleMap.id == simple_map_id).first()
+        if not simple_map:
+            db.add(SimpleMap(
+                id=simple_map_id,
+                survey_area_id=survey_area_id,
+                artifact_reference="normalized://phase1-simple-map",
+                created_by=current_user.id
+            ))
+        payload.simple_map_id = simple_map_id
+        return None, simple_map_id
+
+    return None, None
+
+
 @router.post("/{survey_id}/sync", response_model=SurveySyncResult, status_code=status.HTTP_200_OK)
 def sync_survey_root(
     survey_id: uuid.UUID,
@@ -36,6 +101,8 @@ def sync_survey_root(
     db: Annotated[Session, Depends(get_db)]
 ):
     survey = db.query(Survey).filter(Survey.id == survey_id).first()
+    if survey:
+        _verify_area_access(survey.survey_area_id, current_user, db)
 
     # 1. Ingest Survey Root if not centrally present and provided in payload
     if not survey:
@@ -44,10 +111,13 @@ def sync_survey_root(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Survey root does not exist centrally and survey creation payload was not supplied"
             )
-        # Verify survey_area exists
-        area = db.query(SurveyArea).filter(SurveyArea.id == payload.survey.survey_area_id).first()
-        if not area:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Survey area not found")
+        _verify_area_access(payload.survey.survey_area_id, current_user, db)
+        floor_plan_id, simple_map_id = _ensure_mode_artifact(
+            payload.survey.survey_area_id,
+            payload.survey,
+            current_user,
+            db
+        )
 
         started_at = payload.survey.started_at or utc_now()
         survey = Survey(
@@ -56,8 +126,8 @@ def sync_survey_root(
             title=payload.survey.title,
             mode=payload.survey.mode,
             status="in_progress",
-            floor_plan_id=payload.survey.floor_plan_id,
-            simple_map_id=payload.survey.simple_map_id,
+            floor_plan_id=floor_plan_id,
+            simple_map_id=simple_map_id,
             created_by=current_user.id,
             started_at=started_at,
             created_at=utc_now(),

@@ -38,6 +38,10 @@ data class SurveyCanvasUiState(
     val error: String? = null
 )
 
+private const val MODE_FLOOR_PLAN = "floor_plan"
+private const val MODE_SIMPLE_MAP = "simple_map"
+private const val MODE_LOCATION_SURVEY = "location_survey"
+
 @HiltViewModel
 class SurveyCanvasViewModel @Inject constructor(
     private val surveyDao: SurveyDao,
@@ -106,36 +110,46 @@ class SurveyCanvasViewModel @Inject constructor(
                 val posLabel = label ?: "Point $count"
 
                 val posEntity = when (mode) {
-                    "floor_plan" -> SpatialPositionEntity(
-                        id = posId,
-                        surveyId = surveyId,
-                        label = posLabel,
-                        floorPlanX = x ?: 0.5,
-                        floorPlanY = y ?: 0.5,
-                        simpleMapX = null,
-                        simpleMapY = null,
-                        latitude = null,
-                        longitude = null,
-                        accuracyMeters = null,
-                        capturedAt = null,
-                        createdAt = now,
-                        syncState = "pending"
-                    )
-                    "simple_map" -> SpatialPositionEntity(
-                        id = posId,
-                        surveyId = surveyId,
-                        label = posLabel,
-                        floorPlanX = null,
-                        floorPlanY = null,
-                        simpleMapX = x ?: 0.5,
-                        simpleMapY = y ?: 0.5,
-                        latitude = null,
-                        longitude = null,
-                        accuracyMeters = null,
-                        capturedAt = null,
-                        createdAt = now,
-                        syncState = "pending"
-                    )
+                    MODE_FLOOR_PLAN -> {
+                        require(x != null && y != null) {
+                            "Tap the normalized floor-plan workspace to choose a sampling position."
+                        }
+                        SpatialPositionEntity(
+                            id = posId,
+                            surveyId = surveyId,
+                            label = posLabel,
+                            floorPlanX = x.coerceIn(0.0, 1.0),
+                            floorPlanY = y.coerceIn(0.0, 1.0),
+                            simpleMapX = null,
+                            simpleMapY = null,
+                            latitude = null,
+                            longitude = null,
+                            accuracyMeters = null,
+                            capturedAt = null,
+                            createdAt = now,
+                            syncState = "pending"
+                        )
+                    }
+                    MODE_SIMPLE_MAP -> {
+                        require(x != null && y != null) {
+                            "Tap the simple map workspace to choose a sampling position."
+                        }
+                        SpatialPositionEntity(
+                            id = posId,
+                            surveyId = surveyId,
+                            label = posLabel,
+                            floorPlanX = null,
+                            floorPlanY = null,
+                            simpleMapX = x.coerceIn(0.0, 1.0),
+                            simpleMapY = y.coerceIn(0.0, 1.0),
+                            latitude = null,
+                            longitude = null,
+                            accuracyMeters = null,
+                            capturedAt = null,
+                            createdAt = now,
+                            syncState = "pending"
+                        )
+                    }
                     else -> {
                         val locationFix = locationProvider.getCurrentLocation()
                         SpatialPositionEntity(
@@ -167,6 +181,21 @@ class SurveyCanvasViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isScanning = false,
                     error = e.message ?: "Failed to add position and scan"
+                )
+            }
+        }
+    }
+
+    fun scanExistingPosition(surveyId: UUID, spatialPositionId: UUID) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isScanning = true, error = null)
+            try {
+                wifiScanRunner.performScanCycle(surveyId, spatialPositionId)
+                loadSurveyCanvasData(surveyId)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isScanning = false,
+                    error = e.message ?: "Failed to add scan cycle"
                 )
             }
         }

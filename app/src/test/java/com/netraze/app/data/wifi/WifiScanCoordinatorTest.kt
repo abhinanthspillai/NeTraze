@@ -64,6 +64,7 @@ class WifiScanCoordinatorTest {
         assertNotNull(cycle.id)
         assertEquals(surveyId, cycle.surveyId)
         assertEquals(positionId, cycle.spatialPositionId)
+        assertEquals(false, cycle.freshResults)
         assertEquals("pending", cycle.syncState)
         assertEquals(1, fakeScanCycleDao.insertedCycles.size)
     }
@@ -90,6 +91,10 @@ class WifiScanCoordinatorTest {
 
         override suspend fun getScanCyclesForPosition(spatialPositionId: UUID): List<ScanCycleEntity> {
             return insertedCycles.filter { it.spatialPositionId == spatialPositionId }
+        }
+
+        override suspend fun updateSyncState(ids: List<UUID>, syncState: String) {
+            insertedCycles.replaceAll { if (it.id in ids) it.copy(syncState = syncState) else it }
         }
     }
 }

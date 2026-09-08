@@ -54,11 +54,13 @@ class SurveyCanvasViewModelTest {
 
     class FakeWifiScanRunner : WifiScanRunner {
         val calls = mutableListOf<Pair<UUID, UUID?>>()
+        var shouldFail = false
 
         override suspend fun performScanCycle(
             surveyId: UUID,
             spatialPositionId: UUID?
         ): Result<ScanCycleEntity> {
+            if (shouldFail) throw IllegalStateException("Scan failed")
             calls.add(surveyId to spatialPositionId)
             return Result.success(
                 ScanCycleEntity(
@@ -267,6 +269,33 @@ class SurveyCanvasViewModelTest {
         assertNull(position.capturedAt)
     }
 
+    @Test
+    fun testFloorPlanRequiresExplicitCoordinates() = runTest {
+        viewModel.addPositionAndScan(surveyId = UUID.randomUUID(), mode = "floor_plan")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(fakeSpatialDao.positions.isEmpty())
+        assertTrue(fakeWifiScanRunner.calls.isEmpty())
+        assertEquals(
+            "Tap the normalized floor-plan workspace to choose a sampling position.",
+            viewModel.uiState.value.error
+        )
+    }
+
+    @Test
+    fun testMultipleScanCyclesMayUseSameSpatialPosition() = runTest {
+        val surveyId = UUID.randomUUID()
+        val positionId = UUID.randomUUID()
+
+        viewModel.scanExistingPosition(surveyId, positionId)
+        viewModel.scanExistingPosition(surveyId, positionId)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(2, fakeWifiScanRunner.calls.size)
+        assertEquals(positionId, fakeWifiScanRunner.calls[0].second)
+        assertEquals(positionId, fakeWifiScanRunner.calls[1].second)
+    }
+
     private class FakeSurveyDao : SurveyDao {
         val surveys = mutableMapOf<UUID, SurveyEntity>()
 
@@ -287,6 +316,9 @@ class SurveyCanvasViewModelTest {
         override suspend fun insertSpatialPosition(spatialPosition: SpatialPositionEntity) { positions.add(spatialPosition) }
         override suspend fun getSpatialPositionById(id: UUID): SpatialPositionEntity? = positions.find { it.id == id }
         override suspend fun getSpatialPositionsForSurvey(surveyId: UUID): List<SpatialPositionEntity> = positions.filter { it.surveyId == surveyId }
+        override suspend fun updateSyncState(ids: List<UUID>, syncState: String) {
+            positions.replaceAll { if (it.id in ids) it.copy(syncState = syncState) else it }
+        }
     }
 
     private class FakeScanCycleDao : ScanCycleDao {
@@ -297,6 +329,9 @@ class SurveyCanvasViewModelTest {
         override suspend fun getScanCycleById(id: UUID): ScanCycleEntity? = cycles.find { it.id == id }
         override suspend fun getScanCyclesForSurvey(surveyId: UUID): List<ScanCycleEntity> = cycles.filter { it.surveyId == surveyId }
         override suspend fun getScanCyclesForPosition(spatialPositionId: UUID): List<ScanCycleEntity> = cycles.filter { it.spatialPositionId == spatialPositionId }
+        override suspend fun updateSyncState(ids: List<UUID>, syncState: String) {
+            cycles.replaceAll { if (it.id in ids) it.copy(syncState = syncState) else it }
+        }
     }
 
     private class FakeWifiObservationDao : WifiObservationDao {
@@ -305,5 +340,8 @@ class SurveyCanvasViewModelTest {
         override suspend fun insertObservations(observations: List<WifiObservationEntity>) { this.observations.addAll(observations) }
         override suspend fun getObservationsForCycle(scanCycleId: UUID): List<WifiObservationEntity> = observations.filter { it.scanCycleId == scanCycleId }
         override suspend fun getObservationsForBssid(bssid: String): List<WifiObservationEntity> = observations.filter { it.bssid == bssid }
+        override suspend fun updateSyncState(ids: List<UUID>, syncState: String) {
+            observations.replaceAll { if (it.id in ids) it.copy(syncState = syncState) else it }
+        }
     }
 }

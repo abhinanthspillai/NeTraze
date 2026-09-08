@@ -79,6 +79,23 @@ class HierarchyViewModel @Inject constructor(
         }
     }
 
+    fun createProjectAndSelect(name: String, onSuccess: (ProjectEntity) -> Unit = {}) {
+        val repo = repository ?: return
+        if (name.isBlank()) return
+        _isLoading.update { true }
+        _error.update { null }
+        viewModelScope.launch {
+            val result = repo.createProject(name)
+            _isLoading.update { false }
+            result.onSuccess { project ->
+                loadProjects()
+                onSuccess(project)
+            }.onFailure { ex ->
+                _error.update { ex.message ?: "Failed to create project" }
+            }
+        }
+    }
+
     fun loadBuildings(projectId: UUID) {
         val repo = repository ?: return
         _isLoading.update { true }
@@ -105,6 +122,23 @@ class HierarchyViewModel @Inject constructor(
             result.onSuccess {
                 loadBuildings(projectId)
                 onSuccess()
+            }.onFailure { ex ->
+                _error.update { ex.message ?: "Failed to create building" }
+            }
+        }
+    }
+
+    fun createBuildingAndSelect(projectId: UUID, name: String, onSuccess: (BuildingEntity) -> Unit = {}) {
+        val repo = repository ?: return
+        if (name.isBlank()) return
+        _isLoading.update { true }
+        _error.update { null }
+        viewModelScope.launch {
+            val result = repo.createBuilding(projectId, name)
+            _isLoading.update { false }
+            result.onSuccess { building ->
+                loadBuildings(projectId)
+                onSuccess(building)
             }.onFailure { ex ->
                 _error.update { ex.message ?: "Failed to create building" }
             }
@@ -143,6 +177,23 @@ class HierarchyViewModel @Inject constructor(
         }
     }
 
+    fun createFloorAndSelect(buildingId: UUID, name: String, onSuccess: (FloorEntity) -> Unit = {}) {
+        val repo = repository ?: return
+        if (name.isBlank()) return
+        _isLoading.update { true }
+        _error.update { null }
+        viewModelScope.launch {
+            val result = repo.createFloor(buildingId, name)
+            _isLoading.update { false }
+            result.onSuccess { floor ->
+                loadFloors(buildingId)
+                onSuccess(floor)
+            }.onFailure { ex ->
+                _error.update { ex.message ?: "Failed to create floor" }
+            }
+        }
+    }
+
     fun loadSurveyAreas(floorId: UUID) {
         val repo = repository ?: return
         _isLoading.update { true }
@@ -172,6 +223,81 @@ class HierarchyViewModel @Inject constructor(
             }.onFailure { ex ->
                 _error.update { ex.message ?: "Failed to create survey area" }
             }
+        }
+    }
+
+    fun createSurveyAreaAndSelect(floorId: UUID, name: String, onSuccess: (SurveyAreaEntity) -> Unit = {}) {
+        val repo = repository ?: return
+        if (name.isBlank()) return
+        _isLoading.update { true }
+        _error.update { null }
+        viewModelScope.launch {
+            val result = repo.createSurveyArea(floorId, name)
+            _isLoading.update { false }
+            result.onSuccess { area ->
+                loadSurveyAreas(floorId)
+                onSuccess(area)
+            }.onFailure { ex ->
+                _error.update { ex.message ?: "Failed to create survey area" }
+            }
+        }
+    }
+
+    fun createLocationHierarchy(
+        projectName: String,
+        buildingName: String,
+        floorName: String,
+        surveyAreaName: String,
+        onSuccess: (ProjectEntity, BuildingEntity, FloorEntity, SurveyAreaEntity) -> Unit
+    ) {
+        val repo = repository ?: return
+        val project = projectName.trim()
+        val building = buildingName.trim()
+        val floor = floorName.trim()
+        val area = surveyAreaName.trim()
+        if (project.isBlank() || building.isBlank() || floor.isBlank() || area.isBlank()) return
+
+        _isLoading.update { true }
+        _error.update { null }
+        viewModelScope.launch {
+            val projectResult = repo.createProject(project)
+            if (projectResult.isFailure) {
+                _isLoading.update { false }
+                _error.update { projectResult.exceptionOrNull()?.message ?: "Failed to create project" }
+                return@launch
+            }
+
+            val createdProject = projectResult.getOrThrow()
+            val buildingResult = repo.createBuilding(createdProject.id, building)
+            if (buildingResult.isFailure) {
+                _isLoading.update { false }
+                _error.update { buildingResult.exceptionOrNull()?.message ?: "Failed to create building" }
+                return@launch
+            }
+
+            val createdBuilding = buildingResult.getOrThrow()
+            val floorResult = repo.createFloor(createdBuilding.id, floor)
+            if (floorResult.isFailure) {
+                _isLoading.update { false }
+                _error.update { floorResult.exceptionOrNull()?.message ?: "Failed to create floor" }
+                return@launch
+            }
+
+            val createdFloor = floorResult.getOrThrow()
+            val areaResult = repo.createSurveyArea(createdFloor.id, area)
+            if (areaResult.isFailure) {
+                _isLoading.update { false }
+                _error.update { areaResult.exceptionOrNull()?.message ?: "Failed to create survey area" }
+                return@launch
+            }
+
+            val createdArea = areaResult.getOrThrow()
+            loadProjects()
+            loadBuildings(createdProject.id)
+            loadFloors(createdBuilding.id)
+            loadSurveyAreas(createdFloor.id)
+            _isLoading.update { false }
+            onSuccess(createdProject, createdBuilding, createdFloor, createdArea)
         }
     }
 }

@@ -65,10 +65,8 @@ def _get_survey_area_authorization(survey_area_id: uuid.UUID, current_user: User
 
 
 def _require_mutation_authority(current_user: User, is_owner: bool):
-    if current_user.role != "administrator":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to perform this operation")
     if not is_owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project owner administrator may modify hierarchy")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project owner may modify hierarchy")
 
 
 # ==========================================
@@ -98,9 +96,6 @@ def create_project(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role != "administrator":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators may create projects")
-
     new_project = Project(
         id=uuid.uuid4(),
         owner_id=current_user.id,

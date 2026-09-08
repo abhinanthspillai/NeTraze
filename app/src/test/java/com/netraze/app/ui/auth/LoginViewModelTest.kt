@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,6 +21,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
+import java.io.IOException
 import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -90,9 +94,101 @@ class LoginViewModelTest {
         assertNull(fakeAuthApi.lastRegistration)
     }
 
+    @Test
+    fun testStoredSessionWithValidProfileRestoresAuthenticated() = runTest {
+        fakeAuthRepository.currentSession = AuthSession("token_123", UUID.randomUUID(), "local@netraze.app", "user")
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.authState.value.isAuthenticated)
+        assertEquals("user@netraze.app", viewModel.authState.value.userProfile?.email)
+        assertEquals(fakeAuthRepository.currentSession, viewModel.authState.value.session)
+    }
+
+    @Test
+    fun testStoredSessionWithInternetUnavailableRestoresOfflineAuthenticatedState() = runTest {
+        val storedSession = AuthSession("token_123", UUID.randomUUID(), "offline@netraze.app", "user")
+        fakeAuthRepository.currentSession = storedSession
+        fakeAuthApi.getMeException = IOException("offline")
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.authState.value.isAuthenticated)
+        assertEquals(storedSession, viewModel.authState.value.session)
+        assertEquals(storedSession, fakeAuthRepository.currentSession)
+        assertEquals("Unable to verify your session. Check your connection.", viewModel.authState.value.profileError)
+    }
+
+    @Test
+    fun testStartupNetworkFailureDoesNotClearStoredSession() = runTest {
+        val storedSession = AuthSession("token_123", UUID.randomUUID(), "timeout@netraze.app", "user")
+        fakeAuthRepository.currentSession = storedSession
+        fakeAuthApi.getMeException = IOException("timeout")
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.authState.value.isAuthenticated)
+        assertEquals(storedSession, fakeAuthRepository.currentSession)
+    }
+
+    @Test
+    fun testNoStoredSessionRoutesUnauthenticated() = runTest {
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.authState.value.isAuthenticated)
+        assertNull(viewModel.authState.value.session)
+    }
+
+    @Test
+    fun testConfirmedInvalidSessionClearsStoredSession() = runTest {
+        fakeAuthRepository.currentSession = AuthSession("token_123", UUID.randomUUID(), "expired@netraze.app", "user")
+        fakeAuthApi.getMeException = httpException(401)
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.authState.value.isAuthenticated)
+        assertNull(fakeAuthRepository.currentSession)
+    }
+
+    @Test
+    fun testBackendTemporaryFailureKeepsOfflineAuthenticatedSession() = runTest {
+        val storedSession = AuthSession("token_123", UUID.randomUUID(), "render@netraze.app", "user")
+        fakeAuthRepository.currentSession = storedSession
+        fakeAuthApi.getMeException = httpException(503)
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.authState.value.isAuthenticated)
+        assertEquals(storedSession, fakeAuthRepository.currentSession)
+    }
+
+    @Test
+    fun testExplicitLogoutClearsStoredSessionAndAuthenticatesFalse() = runTest {
+        fakeAuthRepository.currentSession = AuthSession("token_123", UUID.randomUUID(), "user@netraze.app", "user")
+        viewModel = LoginViewModel(fakeAuthRepository, fakeAuthApi)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.authState.value.isAuthenticated)
+        assertNull(fakeAuthRepository.currentSession)
+    }
+
+    private fun httpException(code: Int): HttpException {
+        return HttpException(Response.error<UserDto>(code, "".toResponseBody()))
+    }
+
     private class FakeAuthRepository : AuthRepository {
         var shouldReturnError = false
-        private var currentSession: AuthSession? = null
+        var currentSession: AuthSession? = null
         override suspend fun login(email: String, password: String): Result<UserDto> =
             if (shouldReturnError) Result.failure(Exception("Invalid email address or password."))
             else {
@@ -107,11 +203,15 @@ class LoginViewModelTest {
 
     private class FakeAuthApi : AuthApi {
         var lastRegistration: RegisterRequestDto? = null
+        var getMeException: Exception? = null
         override suspend fun login(request: LoginRequestDto): LoginResponseDto {
             val id = UUID.randomUUID()
             return LoginResponseDto("token_123", "bearer", UserDto(id, request.email, "user"))
         }
-        override suspend fun getMe() = UserDto(UUID.randomUUID(), "user@netraze.app", "user")
+        override suspend fun getMe(): UserDto {
+            getMeException?.let { throw it }
+            return UserDto(UUID.randomUUID(), "user@netraze.app", "user")
+        }
         override suspend fun registerUser(request: RegisterRequestDto): UserDto {
             lastRegistration = request
             return UserDto(UUID.randomUUID(), request.email, "user")

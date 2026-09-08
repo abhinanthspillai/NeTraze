@@ -73,4 +73,20 @@ class SecureSessionStoreTest {
         assertNull(retrieved)
         assertFalse(sessionStore.hasActiveSession())
     }
+
+    @Test
+    fun testUnreadableStoredSessionReturnsNullAndClearsSession() = runBlocking {
+        val session = AuthSession(
+            accessToken = "test_jwt_token_abcdef123456",
+            userId = UUID.randomUUID(),
+            email = "corrupt@netraze.app",
+            role = "user"
+        )
+        sessionStore.saveSession(session)
+
+        val unreadableStore = SecureSessionStore(context.sessionDataStore, FakeSessionCrypto())
+
+        assertNull(unreadableStore.getSession())
+        assertFalse(unreadableStore.hasActiveSession())
+    }
 }
