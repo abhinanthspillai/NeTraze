@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.rounded.Assignment
 import androidx.compose.material.icons.rounded.Business
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.Icon
@@ -59,14 +58,6 @@ fun DashboardHomeScreen(
     onBrowseLocations: () -> Unit,
     onViewAllSurveys: () -> Unit
 ) {
-    val displayRole = when (role.lowercase()) {
-        "administrator" -> "Administrator"
-        "user" -> "User"
-        else -> "User"
-    }
-    
-    val name = email.substringBefore("@").replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = SurfaceLight
@@ -82,39 +73,9 @@ fun DashboardHomeScreen(
             // Header Section
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(SurfaceTranslucent),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Person,
-                            contentDescription = "Avatar",
-                            tint = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = name,
-                            style = NetrazeTypography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = displayRole,
-                            style = NetrazeTypography.bodyMedium,
-                            color = TextSecondary
-                        )
-                    }
-                }
-
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -132,7 +93,7 @@ fun DashboardHomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Large Title
             Text(
